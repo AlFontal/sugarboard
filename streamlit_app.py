@@ -25,7 +25,7 @@ DIRECTIONS = {
 # Nightscout API calls and data processing
 last_value, previous_value = requests.get(f'https://{SITE}/api/v1/entries.json?count=2').json()
 curr_dir = DIRECTIONS[last_value['direction']]
-prev_time = datetime.datetime.now() - datetime.timedelta(hours=LINEPLOT_HOURS + 2)
+prev_time = datetime.datetime.now() - datetime.timedelta(hours=LINEPLOT_HOURS)
 initial_date = datetime.datetime.now() - datetime.timedelta(days=90)
 final_date = datetime.datetime.now()
 url = f'https://{SITE}/api/v1/entries/sgv.json?&find[dateString][$gte]={initial_date}' \
