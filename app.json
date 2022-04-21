@@ -1,0 +1,9 @@
+{
+    "name": "sugarboard",
+    "description": "Streamlit App displaying personal glucose monitoring stats.",
+    "repository": "https://github.com/AlFontal/sugarboard",
+    "keywords": [
+        "streamlit",
+        "python"
+    ]
+}
