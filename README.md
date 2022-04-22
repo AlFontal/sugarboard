@@ -1,29 +1,9 @@
-# sugarboard
+# Sugarboard
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/gagan3012/streamlit-tags/examples/app.py)
 
-Streamlit App displaying personal glucose monitoring stats.
+Streamlit app made to display data from a personal Continuous Glucose Monitor data by
+using [Nightscout](http://www.nightscout.info/)'s API. 
 
-Built with ❤️ by [AlFontal](https://github.com/AlFontal)
-
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/AlFontal/sugarboard)
-
-
-## What's this?
-
-- `README.md`: This Document! To help you find your way around
-- `streamlit_app.py`: The main app that gets run by [`streamlit`](https://docs.streamlit.io/)
-- `requirements.txt`: Pins the version of packages needed
-- `LICENSE`: Follows Streamlit's use of Apache 2.0 Open Source License
-- `.gitignore`: Tells git to avoid comitting / scanning certain local-specific files
-- `.streamlit/config.toml`: Customizes the behaviour of streamlit without specifying command line arguments (`streamlit config show`)
-- `Makefile`: Provides useful commands for working on the project such as `run`, `lint`, `test`, and `test-e2e`
-- `requirements.dev.txt`: Provides packages useful for development but not necessarily production deployment. Also includes all of `requirements.txt` via `-r`
-- `pyproject.toml`: Provides a main configuration point for Python dev tools
-- `.flake8`: Because `flake8` doesn't play nicely with `pyproject.toml` out of the box
-- `.pre-commit-config.yaml`: Provides safeguards for what you commit and push to your repo
-- `tests/`: Folder for tests to be picked up by `pytest`
-- `app.json`: Provides "Deploy to Heroku" functionality / specification
-- `Procfile`: Special file to tell Heroku how to run our app (`streamlit run`) (see [docs](https://devcenter.heroku.com/articles/procfile))
-- `runtime.txt`: Special file to tell Heroku which python version to use (see [supported runtimes](https://devcenter.heroku.com/articles/python-support#supported-runtimes))
 
 ## Local Setup
 
@@ -59,8 +39,3 @@ make test-e2e-baseline
 # After running tests, display the coverage html report on localhost
 make coverage
 ```
-## Deploy
-
-For the easiest experience, deploy to [Streamlit Cloud](https://streamlit.io/cloud)
-
-For other options, see [Streamlit deployment wiki](https://discuss.streamlit.io/t/streamlit-deployment-guide-wiki/5099)
