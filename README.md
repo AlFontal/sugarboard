@@ -1,5 +1,5 @@
 # Sugarboard
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/gagan3012/streamlit-tags/examples/app.py)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/alfontal/sugarboard)
 
 Streamlit app made to display data from a personal Continuous Glucose Monitor data by
 using [Nightscout](http://www.nightscout.info/)'s API. 
