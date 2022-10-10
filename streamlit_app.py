@@ -7,13 +7,15 @@ import pytz
 import requests
 import streamlit as st
 
-from src.utils import  mean_glucose_to_hba1c
+from src.utils import  mean_glucose_to_hba1c, inject_align_style
 from mizani.formatters import date_format, percent_format
 
 # Definition of constants
 SITE = 'cgm-monitor-alfontal.herokuapp.com'
 MAX_VALUES = 999999
 LINEPLOT_HOURS = 4
+TARGET_LOW = 70
+TARGET_HIGH = 150
 DIRECTIONS = {
     'DoubleDown': '⇊',
     'SingleDown': '↓',
@@ -70,18 +72,19 @@ f = (tir_df
      .pipe(lambda dd: p9.ggplot(dd)
                       + p9.aes(y='cat_glucose', fill='level_1')
                       + p9.geom_col(p9.aes(x='level_1'), width=.95)
-                      + p9.theme_void()
-                      + p9.theme(text=p9.element_text(color='white'), figure_size=(5, 4),
-                                 axis_text_x=p9.element_text(rotation=60, va='center_baseline', size=8),
-                                 axis_text_y=p9.element_text(ha='right', size=8),
-                                 strip_text=p9.element_text(size=11))
+                      + p9.geom_text(p9.aes(x='level_1', label='percent_label'), size=7, nudge_y=.05, color='white')
                       + p9.facet_wrap('group', ncol=2)
                       + p9.guides(fill=False)
                       + p9.labs(x='', y='', fill='')
                       + p9.scale_y_continuous(labels=percent_format(), limits=(0, dd.cat_glucose.max() + .1))
                       + p9.scale_fill_manual(['#960200', '#CE6C47', '#49D49D', '#FFD046', '#CE6C47', '#960200'])
-                      + p9.geom_text(p9.aes(label='"TIR=" + percent_label'), x=3, y=dd.cat_glucose.max() + .05,
-                                     color='white', data=dd.query("level_1=='70-150'"), size=9)
+                      + p9.theme_void()
+                      + p9.theme(dpi=300,
+                                 figure_size=(5, 3),
+                                 text=p9.element_text(color='white'),
+                                 axis_text_x=p9.element_text(rotation=60, va='center_baseline', size=8),
+                                 axis_text_y=p9.element_blank(),
+                                 strip_text=p9.element_text(size=11))
            )
      )
 
@@ -89,20 +92,23 @@ p = (curr_df
      .pipe(lambda dd:
            p9.ggplot(dd)
            + p9.aes('date', 'sgv')
-           + p9.geom_point(size=.2, color='white')
+           + p9.geom_point(size=.6, color='white')
            + p9.geom_line(p9.aes(group='device'), color='white')
            + p9.labs(x='', y='Glucose [mg/dl]')
            + p9.scale_x_datetime(labels=date_format('%H:%M', tz=pytz.timezone('CET')))
+           + p9.annotate(geom='hline',
+                         yintercept=[TARGET_LOW, TARGET_HIGH],
+                         linetype='dashed',
+                         color='lightgreen')
            + p9.theme_void()
-           + p9.theme(dpi=120, figure_size=(5, 3),
+           + p9.theme(dpi=300,
+                      figure_size=(5, 3),
                       text=p9.element_text(color='white'),
                       title=p9.element_text(size=8),
-                      axis_title=p9.element_text(rotation=90, size=8, va='bottom'),
+                      axis_title_y=p9.element_text(rotation=90, size=9, va='bottom', margin={'r': 10}),
                       axis_text_y=p9.element_text(color='white', size=7, ha='right'),
                       axis_text_x=p9.element_text(size=7),
                       panel_grid=p9.element_text(color='white', alpha=.05))
-           + p9.geom_hline(yintercept=70, linetype='dashed', color='green')
-           + p9.geom_hline(yintercept=150, linetype='dashed', color='green')
            + p9.ylim(min(40, dd['sgv'].min()), max(200, dd['sgv'].max() + 10))
            )
      )
@@ -167,20 +173,20 @@ h = (sel_df_quantiles
        + p9.geom_ribbon(p9.aes(ymax='q90', ymin='q10'), alpha=.3, fill='white')
        + p9.geom_ribbon(p9.aes(ymax='q75', ymin='q25'), alpha=.7, fill='white')
        + p9.geom_line(color='black')
-       + p9.annotate('hline', linetype='dashed', yintercept=[70, 150], color='darkgreen', alpha=.6)
-       + p9.annotate('hline', linetype='dashed', yintercept=[180], color='orange', alpha=.6)
+       + p9.annotate(geom='hline', yintercept=[TARGET_LOW, TARGET_HIGH], linetype='dashed', color='lightgreen')
        + p9.labs(y='Glucose [mg/dl]', x='')
-       + p9.theme(figure_size=(4, 2),
+       + p9.theme_void()
+       + p9.theme(dpi=300,
+                  figure_size=(5, 3),
                   text=p9.element_text(color='white'),
                   title=p9.element_text(size=8),
+                  axis_title_y=p9.element_text(rotation=90, size=9, va='bottom', margin={'r': 10}),
                   axis_text_y=p9.element_text(color='white', size=7, ha='right'),
                   axis_text_x=p9.element_text(size=7),
-                  panel_background=p9.element_rect(color='white', alpha=0),
-                  plot_background=p9.element_blank(),
-                  panel_grid=p9.element_blank(),
+                  panel_grid=p9.element_text(color='white', alpha=.05),
                   panel_border=p9.element_rect(fill='white')
                  )
-       + p9.scale_y_continuous(limits=(40, None), breaks=[70, 140, 210])
+       + p9.scale_y_continuous(limits=(40, None))
        + p9.scale_x_continuous(breaks=[3, 9, 15, 21], labels=[str(x) + 'h' for x in [3, 9, 15, 21]])
       )
 )
@@ -189,13 +195,13 @@ st.markdown('---')
 
 c1, c2, c3 = st.columns([3, 4, 4])
 with c1:
-    st.markdown('#### Time in range (%) during last periods')
+    st.markdown(inject_align_style('#### Time in range (%) during last periods'), unsafe_allow_html=True)
     st.pyplot(p9.ggplot.draw(f))
 
 with c2:
-    st.markdown('#### CGM values from the last 4 hours')
+    st.markdown(inject_align_style('#### CGM values from the last 4 hours'), unsafe_allow_html=True)
     st.pyplot(p9.ggplot.draw(p))
 
 with c3:
-    st.markdown('#### Glucose patterns from selected period')
+    st.markdown(inject_align_style('#### Glucose patterns from selected period'), unsafe_allow_html=True)
     st.pyplot(p9.ggplot.draw(h))
