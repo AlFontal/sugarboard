@@ -37,6 +37,8 @@ url = f'https://{SITE}/api/v1/entries/sgv.json?&find[dateString][$gte]={initial_
 
 current_url = f'https://{SITE}/api/v1/entries/sgv.json?&find[dateString][$gte]={prev_time}&count=100'
 
+bg_categories = ['<50', '50-69', '70-150', '151-180', '181-250', '>250']
+
 df = (pd.DataFrame(requests.get(url).json())
       .assign(date=lambda dd: pd.to_datetime(dd.dateString))
       [['date', 'sgv', 'device']]
@@ -45,15 +47,15 @@ df = (pd.DataFrame(requests.get(url).json())
       ['sgv']
       .mean()
       .reset_index()
-      .assign(cat_glucose=lambda dd: pd.cut(dd['sgv'], bins=[0, 50, 70, 150, 180, 250, np.inf],
-                                            labels=['<50', '50-69', '70-150', '151-180', '181-250', '>250']))
+      .assign(cat_glucose=lambda dd: pd.cut(dd['sgv'],
+                                            bins=[0, 50, 70, 150, 180, 250, np.inf],
+                                            labels=bg_categories))
       )
 
 last_24 = df.loc[df.date > df.date.max() - pd.to_timedelta('24 h')].assign(group='Last Day')
 last_week = df.loc[df.date > df.date.max() - pd.to_timedelta('7 days')].assign(group='Last Week')
 last_month = df.loc[df.date > df.date.max() - pd.to_timedelta('30 days')].assign(group='Last Month')
 last_90 = df.loc[df.date > df.date.max() - pd.to_timedelta('90 days')].assign(group='Last 3 Months')
-
 curr_df = (pd.DataFrame(requests.get(current_url.replace(' ', 'T')).json())
     .assign(date=lambda dd: pd.to_datetime(dd.dateString))
 [['date', 'sgv', 'device']])
@@ -61,22 +63,25 @@ curr_df = (pd.DataFrame(requests.get(current_url.replace(' ', 'T')).json())
 # Figures
 tir_df = (pd.concat([last_24, last_week, last_month, last_90])
             .groupby('group')
-            .apply(lambda dd: dd.cat_glucose.value_counts(True))
+            .apply(lambda dd: dd['cat_glucose'].value_counts(True)[bg_categories])
             .reset_index()
-            .assign(percent_label=lambda dd: (dd.cat_glucose.round(2) * 100).astype(int).astype(str) + '%')
+            .melt('group')
+            .assign(percent_label=lambda dd: (dd['value'].round(2) * 100).astype(int).astype(str) + '%')
             .assign(group=lambda dd: pd.Categorical(dd.group, ordered=True,
                     categories=['Last Day', 'Last Week', 'Last Month', 'Last 3 Months']))
+            .assign(cat_glucose=lambda dd: pd.Categorical(dd.cat_glucose, categories=bg_categories, ordered=True))
      )
 
 f = (tir_df
      .pipe(lambda dd: p9.ggplot(dd)
-                      + p9.aes(y='cat_glucose', fill='level_1')
-                      + p9.geom_col(p9.aes(x='level_1'), width=.95)
-                      + p9.geom_text(p9.aes(x='level_1', label='percent_label'), size=7, nudge_y=.05, color='white')
+                      + p9.aes(y='value', fill='cat_glucose')
+                      + p9.geom_col(p9.aes(x='cat_glucose'), width=.95)
+                      + p9.geom_text(p9.aes(x='cat_glucose', label='percent_label'),
+                                     size=7, nudge_y=.05, color='white')
                       + p9.facet_wrap('group', ncol=2)
                       + p9.guides(fill=False)
                       + p9.labs(x='', y='', fill='')
-                      + p9.scale_y_continuous(labels=percent_format(), limits=(0, dd.cat_glucose.max() + .1))
+                      + p9.scale_y_continuous(labels=percent_format(), limits=(0, dd['value'].max() + .1))
                       + p9.scale_fill_manual(['#960200', '#CE6C47', '#49D49D', '#FFD046', '#CE6C47', '#960200'])
                       + p9.theme_void()
                       + p9.theme(dpi=300,
