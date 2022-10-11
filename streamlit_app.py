@@ -31,7 +31,7 @@ last_value, previous_value = requests.get(f'https://{SITE}/api/v1/entries.json?c
 curr_dir = DIRECTIONS[last_value['direction']]
 prev_time = datetime.datetime.now() - datetime.timedelta(hours=LINEPLOT_HOURS)
 initial_date = datetime.datetime.now() - datetime.timedelta(days=90)
-final_date = datetime.datetime.now()
+final_date = datetime.datetime.now() + datetime.timedelta(days=1)
 url = f'https://{SITE}/api/v1/entries/sgv.json?&find[dateString][$gte]={initial_date}' \
       f'&find[dateString][$lte]={final_date}&count={MAX_VALUES}'
 
