@@ -1,5 +1,5 @@
 [tool.black]
-target-version = ['py39']
+target-version = ['py311']
 exclude = '''
 /(\.git | \.cache | \.pytest_cache | venv | coverage)/
 '''
@@ -34,8 +34,11 @@ description = "Streamlit App displaying personal glucose monitoring stats."
 authors = ["Alejandro Fontal <alejandrofontal92@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
-pandas = "*"
-numpy = "*"
-plotnine = "*"
-streamlit = "*"
+python = "^3.11"
+numpy = "^2.3.4"
+pandas = "^2.3.3"
+plotnine = "^0.15.1"
+streamlit = "^1.51.0"
+requests = "^2.32.5"
+pytz = "^2025.2"
+mizani = "^0.14.3"
