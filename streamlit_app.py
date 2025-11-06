@@ -2,13 +2,11 @@ import datetime
 
 import numpy as np
 import pandas as pd
-import plotnine as p9
+import plotly.express as px
+import plotly.graph_objects as go
 import pytz
 import requests
 import streamlit as st
-
-from src.utils import  mean_glucose_to_hba1c, inject_align_style
-from mizani.formatters import date_format, percent_format
 
 # Definition of constants
 SITE = 'cgm-monitor-alfontal.herokuapp.com'
@@ -72,62 +70,105 @@ tir_df = (pd.concat([last_24, last_week, last_month, last_90])
             .assign(cat_glucose=lambda dd: pd.Categorical(dd.cat_glucose, categories=bg_categories, ordered=True))
      )
 
-f = (tir_df
-     .pipe(lambda dd: p9.ggplot(dd)
-                      + p9.aes(y='value', fill='cat_glucose')
-                      + p9.geom_col(p9.aes(x='cat_glucose'), width=.95)
-                      + p9.geom_text(p9.aes(x='cat_glucose', label='percent_label'),
-                                     size=7, nudge_y=.05, color='white')
-                      + p9.facet_wrap('group', ncol=2)
-                      + p9.guides(fill=False)
-                      + p9.labs(x='', y='', fill='')
-                      + p9.scale_y_continuous(labels=percent_format(), limits=(0, dd['value'].max() + .1))
-                      + p9.scale_fill_manual(['#960200', '#CE6C47', '#49D49D', '#FFD046', '#CE6C47', '#960200'])
-                      + p9.theme_void()
-                      + p9.theme(dpi=300,
-                                 figure_size=(5, 3),
-                                 text=p9.element_text(color='white'),
-                                 axis_text_x=p9.element_text(rotation=60, va='center_baseline', size=8),
-                                 axis_text_y=p9.element_blank(),
-                                 strip_text=p9.element_text(size=11))
-           )
-     )
+# Time in Range Chart (Interactive Plotly)
+bg_colors = {
+    '<50': '#960200',
+    '50-69': '#CE6C47',
+    '70-150': '#49D49D',
+    '151-180': '#FFD046',
+    '181-250': '#CE6C47',
+    '>250': '#960200'
+}
 
-p = (curr_df
-     .pipe(lambda dd:
-           p9.ggplot(dd)
-           + p9.aes('date', 'sgv')
-           + p9.geom_point(size=.6, color='white')
-           + p9.geom_line(p9.aes(group='device'), color='white')
-           + p9.labs(x='', y='Glucose [mg/dl]')
-           + p9.scale_x_datetime(labels=date_format('%H:%M', tz=pytz.timezone('CET')))
-           + p9.annotate(geom='hline',
-                         yintercept=[TARGET_LOW, TARGET_HIGH],
-                         linetype='dashed',
-                         color='lightgreen')
-           + p9.theme_void()
-           + p9.theme(dpi=300,
-                      figure_size=(5, 3),
-                      text=p9.element_text(color='white'),
-                      title=p9.element_text(size=8),
-                      axis_title_y=p9.element_text(rotation=90, size=9, va='bottom', margin={'r': 10}),
-                      axis_text_y=p9.element_text(color='white', size=7, ha='right'),
-                      axis_text_x=p9.element_text(size=7),
-                      panel_grid=p9.element_text(color='white', alpha=.05))
-           + p9.ylim(min(40, dd['sgv'].min()), max(200, dd['sgv'].max() + 10))
-           )
-     )
+fig_tir = px.bar(
+    tir_df,
+    x='cat_glucose',
+    y='value',
+    color='cat_glucose',
+    facet_col='group',
+    facet_col_wrap=2,
+    text='percent_label',
+    category_orders={'cat_glucose': bg_categories, 'group': ['Last Day', 'Last Week', 'Last Month', 'Last 3 Months']},
+    color_discrete_map=bg_colors
+)
 
-# Add device label in case data is being fetched simultaneously from more than one device
-if curr_df.device.nunique() > 1:
-    last_values_per_device = (curr_df
-                              .groupby('device')
-                              .apply(lambda dd: dd.sort_values('date').iloc[-1])
-                              .reset_index(drop=True)
-                              .assign(date=lambda dd: dd.date + pd.to_timedelta(('12 min')))
-                              )
-    p += p9.geom_text(p9.aes(label='device.str.split("-").str[0]'), data=last_values_per_device,
-                      ha='center', size=6, color='white')
+fig_tir.update_traces(
+    textposition='outside',
+    cliponaxis=False,
+    hovertemplate='Range: %{x}<br>Percentage: %{y:.0%}<extra></extra>'
+)
+
+fig_tir.update_yaxes(
+    matches=None,
+    tickformat='.0%',
+    title=None
+)
+
+fig_tir.update_xaxes(
+    title=None,
+    tickangle=-45
+)
+
+fig_tir.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
+
+fig_tir.update_layout(
+    showlegend=False,
+    bargap=0.3,
+    paper_bgcolor='rgba(0,0,0,0)',
+    plot_bgcolor='rgba(0,0,0,0)',
+    font=dict(color='white', size=10),
+    margin=dict(t=40, r=20, b=40, l=40),
+    height=400
+)
+
+# Recent CGM values chart (Interactive Plotly)
+curr_df['date_local'] = curr_df['date'].dt.tz_convert('Europe/Madrid')
+
+fig_recent = px.line(
+    curr_df,
+    x='date_local',
+    y='sgv',
+    color='device' if curr_df.device.nunique() > 1 else None,
+    markers=True,
+    hover_data={'date_local': '|%H:%M', 'sgv': True, 'device': True}
+)
+
+fig_recent.update_traces(
+    mode='lines+markers',
+    line=dict(width=2),
+    marker=dict(size=6)
+)
+
+fig_recent.add_hline(
+    y=TARGET_LOW,
+    line_dash='dash',
+    line_color='lightgreen',
+    opacity=0.7,
+    annotation_text='Low',
+    annotation_position='right'
+)
+
+fig_recent.add_hline(
+    y=TARGET_HIGH,
+    line_dash='dash',
+    line_color='lightgreen',
+    opacity=0.7,
+    annotation_text='High',
+    annotation_position='right'
+)
+
+fig_recent.update_xaxes(title=None)
+fig_recent.update_yaxes(title='Glucose [mg/dl]')
+
+fig_recent.update_layout(
+    legend_title_text='Device' if curr_df.device.nunique() > 1 else None,
+    hovermode='x unified',
+    paper_bgcolor='rgba(0,0,0,0)',
+    plot_bgcolor='rgba(0,0,0,0)',
+    font=dict(color='white', size=10),
+    margin=dict(t=40, r=20, b=40, l=60),
+    height=400
+)
 
 # Site Definition
 
@@ -172,41 +213,113 @@ sel_df_quantiles = (sel_df
                      .reset_index()
 )
 
-h = (sel_df_quantiles
-     .pipe(lambda dd: p9.ggplot(dd)
-       + p9.aes('hour', 'median')
-       + p9.geom_ribbon(p9.aes(ymax='q90', ymin='q10'), alpha=.3, fill='white')
-       + p9.geom_ribbon(p9.aes(ymax='q75', ymin='q25'), alpha=.7, fill='white')
-       + p9.geom_line(color='black')
-       + p9.annotate(geom='hline', yintercept=[TARGET_LOW, TARGET_HIGH], linetype='dashed', color='lightgreen')
-       + p9.labs(y='Glucose [mg/dl]', x='')
-       + p9.theme_void()
-       + p9.theme(dpi=300,
-                  figure_size=(5, 3),
-                  text=p9.element_text(color='white'),
-                  title=p9.element_text(size=8),
-                  axis_title_y=p9.element_text(rotation=90, size=9, va='bottom', margin={'r': 10}),
-                  axis_text_y=p9.element_text(color='white', size=7, ha='right'),
-                  axis_text_x=p9.element_text(size=7),
-                  panel_grid=p9.element_text(color='white', alpha=.05),
-                  panel_border=p9.element_rect(fill='white')
-                 )
-       + p9.scale_y_continuous(limits=(40, None))
-       + p9.scale_x_continuous(breaks=[3, 9, 15, 21], labels=[str(x) + 'h' for x in [3, 9, 15, 21]])
-      )
+# Glucose patterns chart (Interactive Plotly)
+fig_patterns = go.Figure()
+
+# Add 10th-90th percentile ribbon (lightest)
+fig_patterns.add_trace(go.Scatter(
+    x=sel_df_quantiles['hour'],
+    y=sel_df_quantiles['q90'],
+    mode='lines',
+    line=dict(width=0),
+    showlegend=False,
+    hoverinfo='skip'
+))
+
+fig_patterns.add_trace(go.Scatter(
+    x=sel_df_quantiles['hour'],
+    y=sel_df_quantiles['q10'],
+    mode='lines',
+    fill='tonexty',
+    fillcolor='rgba(255, 255, 255, 0.2)',
+    line=dict(color='rgba(255, 255, 255, 0.2)'),
+    name='10th-90th percentile',
+    hoverinfo='skip'
+))
+
+# Add 25th-75th percentile ribbon (darker)
+fig_patterns.add_trace(go.Scatter(
+    x=sel_df_quantiles['hour'],
+    y=sel_df_quantiles['q75'],
+    mode='lines',
+    line=dict(width=0),
+    showlegend=False,
+    hoverinfo='skip'
+))
+
+fig_patterns.add_trace(go.Scatter(
+    x=sel_df_quantiles['hour'],
+    y=sel_df_quantiles['q25'],
+    mode='lines',
+    fill='tonexty',
+    fillcolor='rgba(255, 255, 255, 0.5)',
+    line=dict(color='rgba(255, 255, 255, 0.5)'),
+    name='25th-75th percentile',
+    hoverinfo='skip'
+))
+
+# Add median line
+fig_patterns.add_trace(go.Scatter(
+    x=sel_df_quantiles['hour'],
+    y=sel_df_quantiles['median'],
+    mode='lines',
+    line=dict(color='black', width=2),
+    name='Median',
+    hovertemplate='%{x:.1f}h: %{y:.0f} mg/dl<extra></extra>'
+))
+
+# Add target range lines
+fig_patterns.add_hline(
+    y=TARGET_LOW,
+    line_dash='dash',
+    line_color='lightgreen',
+    opacity=0.7
+)
+
+fig_patterns.add_hline(
+    y=TARGET_HIGH,
+    line_dash='dash',
+    line_color='lightgreen',
+    opacity=0.7
+)
+
+fig_patterns.update_xaxes(
+    title=None,
+    tickvals=[3, 9, 15, 21],
+    ticktext=['3h', '9h', '15h', '21h']
+)
+
+fig_patterns.update_yaxes(
+    title='Glucose [mg/dl]',
+    range=[40, None]
+)
+
+fig_patterns.update_layout(
+    paper_bgcolor='rgba(0,0,0,0)',
+    plot_bgcolor='rgba(0,0,0,0)',
+    legend=dict(
+        orientation='h',
+        yanchor='bottom',
+        y=1.02,
+        xanchor='right',
+        x=1
+    ),
+    font=dict(color='white', size=10),
+    margin=dict(t=40, r=20, b=40, l=60),
+    height=400
 )
 
 st.markdown('---')
 
 c1, c2, c3 = st.columns([3, 4, 4])
 with c1:
-    st.markdown(inject_align_style('#### Time in range (%) during last periods'), unsafe_allow_html=True)
-    st.pyplot(p9.ggplot.draw(f))
+    st.markdown('#### Time in range (%) during last periods')
+    st.plotly_chart(fig_tir, use_container_width=True)
 
 with c2:
-    st.markdown(inject_align_style('#### CGM values from the last 4 hours'), unsafe_allow_html=True)
-    st.pyplot(p9.ggplot.draw(p))
+    st.markdown('#### CGM values from the last 4 hours')
+    st.plotly_chart(fig_recent, use_container_width=True)
 
 with c3:
-    st.markdown(inject_align_style('#### Glucose patterns from selected period'), unsafe_allow_html=True)
-    st.pyplot(p9.ggplot.draw(h))
+    st.markdown('#### Glucose patterns from selected period')
+    st.plotly_chart(fig_patterns, use_container_width=True)
