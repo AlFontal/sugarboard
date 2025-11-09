@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  sugarboard:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      # Add any environment variables here
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Persist cache directory between container restarts
+      - sugarboard-cache:/app/.cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  sugarboard-cache:
