@@ -9,318 +9,182 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import os
-import pickle
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, cast
+from typing import Any, Callable, Optional, cast
 
-import numpy as np
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-import requests
-from pandas.api.types import is_datetime64_any_dtype
-from nicegui import ui
+from nicegui import app, ui
 
-# Import HbA1c calculation
-import sys
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-from utils import mean_glucose_to_hba1c
-
-# Configuration
-SITE = "cgm-monitor-alfontal.herokuapp.com"
-LINEPLOT_HOURS = 4
-RECENT_POINTS = LINEPLOT_HOURS * 75
-RECENT_REQUEST_TIMEOUT = 20
-TARGET_SEVERE_LOW = 50
-TARGET_LOW = 70
-TARGET_MILD_HIGH = 150
-TARGET_HIGH = 180
-TARGET_SEVERE_HIGH = 250
-BG_CATEGORIES = [
-    f"<{TARGET_SEVERE_LOW}",
-    f"{TARGET_SEVERE_LOW}-{TARGET_LOW - 1}",
-    f"{TARGET_LOW}-{TARGET_MILD_HIGH}",
-    f"{TARGET_MILD_HIGH + 1}-{TARGET_HIGH}",
-    f"{TARGET_HIGH + 1}-{TARGET_SEVERE_HIGH}",
-    f">{TARGET_SEVERE_HIGH}",
-]
-DIRECTIONS = {
-    "DoubleDown": "⇊",
-    "SingleDown": "↓",
-    "FortyFiveDown": "↘",
-    "Flat": "→",
-    "FortyFiveUp": "↗",
-    "SingleUp": "↑",
-    "DoubleUp": "⇈",
-}
-
-# Colors
-STRONG_RED = "#960200"
-LIGHT_RED = "#CE6C47"
-MILD_YELLOW = "#FFD046"
-LIGHT_GREEN = "#49D49D"
-
-# Caching
-CACHE_DIR = Path(__file__).parent / ".cache"
-CACHE_DIR.mkdir(exist_ok=True)
-RECENT_CACHE = CACHE_DIR / "nicegui_recent.pkl"
-HISTORICAL_CACHE = CACHE_DIR / "nicegui_historical.pkl"
-
-
-@dataclass
-class DataState:
-    """Global application state."""
-    last_value: Optional[Dict[str, Any]] = None
-    previous_value: Optional[Dict[str, Any]] = None
-    df_recent: pd.DataFrame = field(default_factory=pd.DataFrame)
-    df_3months: pd.DataFrame = field(default_factory=pd.DataFrame)
-    fetched_at: Optional[float] = None
-    historical_cached_at: Optional[float] = None
-
+from src.cache import load_historical_cache, load_recent_cache, save_historical_cache, save_recent_cache
+from src.charts import (
+    build_histogram_chart,
+    build_pattern_chart,
+    build_recent_chart,
+    build_tir_chart,
+    create_placeholder_chart,
+)
+from src.config import (
+    DEFAULT_NIGHTSCOUT_URL,
+    DIRECTIONS,
+    LIGHT_GREEN,
+    LINEPLOT_HOURS,
+    MILD_YELLOW,
+    RECENT_REQUEST_TIMEOUT,
+    STORAGE_SECRET,
+    STORAGE_SECRET_FROM_ENV,
+    TARGET_HIGH,
+    TARGET_LOW,
+    TARGET_MILD_HIGH,
+)
+from src.data_services import (
+    ensure_timezone_aware,
+    fetch_historical_async,
+    fetch_latest_entry,
+    fetch_recent_data,
+    parse_entry_timestamp,
+)
+from src.nightscout_client import NightscoutClient
+from src.state import DataState
+from src.utils import mean_glucose_to_hba1c
 
 STATE = DataState()
 
 
-# ============================================================================
-# Cache helpers
-# ============================================================================
+def _sanitize_base_url(value: str) -> str:
+    return value.strip().rstrip("/")
 
-def _load_pickle(path: Path) -> Any:
-    if not path.exists():
+
+def get_client_from_storage() -> Optional[NightscoutClient]:
+    storage = app.storage.user
+    base_url = storage.get("ns_base_url")
+    if not base_url:
         return None
-    with open(path, "rb") as fh:
-        return pickle.load(fh)
-
-
-def _save_pickle(path: Path, data: Any) -> None:
-    with open(path, "wb") as fh:
-        pickle.dump(data, fh)
-
-
-def load_historical_cache() -> Optional[pd.DataFrame]:
-    cached = _load_pickle(HISTORICAL_CACHE)
-    if not cached:
-        return None
-    STATE.historical_cached_at = cached.get("cached_at")
-    return cached.get("df_3months")
-
-
-def save_historical_cache(df: pd.DataFrame) -> None:
-    _save_pickle(HISTORICAL_CACHE, {"df_3months": df, "cached_at": time.time()})
-
-
-def load_recent_cache() -> None:
-    cached = _load_pickle(RECENT_CACHE)
-    if not cached:
-        return
-    STATE.last_value = cached.get("last_value")
-    STATE.previous_value = cached.get("previous_value")
-    STATE.df_recent = cached.get("df_recent", pd.DataFrame())
-    STATE.fetched_at = cached.get("fetched_at")
-
-
-def save_recent_cache() -> None:
-    if STATE.df_recent.empty or STATE.last_value is None:
-        return
-    _save_pickle(
-        RECENT_CACHE,
-        {
-            "last_value": STATE.last_value,
-            "previous_value": STATE.previous_value,
-            "df_recent": STATE.df_recent,
-            "fetched_at": STATE.fetched_at,
-        },
-    )
-
-
-# ============================================================================
-# Data fetching
-# ============================================================================
-
-def fetch_recent_data() -> tuple[Dict[str, Any], Dict[str, Any], pd.DataFrame]:
-    """Fetch the most recent CGM entries and return structured data."""
-    response = requests.get(
-        f"https://{SITE}/api/v1/entries/sgv.json",
-        params={"count": RECENT_POINTS},
+    token = storage.get("ns_token") or None
+    api_secret = storage.get("ns_api_secret") or None
+    return NightscoutClient(
+        base_url=base_url,
+        token=token,
+        api_secret=api_secret,
         timeout=RECENT_REQUEST_TIMEOUT,
     )
-    response.raise_for_status()
-    entries = response.json()
-    if not entries:
-        raise ValueError("Nightscout returned no recent entries.")
-
-    # Filter out xDrip-NSFollower device
-    entries = [e for e in entries if e.get("device") != "xDrip-NSFollower"]
-    
-    if not entries:
-        raise ValueError("No valid entries after filtering devices.")
-
-    df_recent = pd.DataFrame(entries)
-    print(df_recent.device.unique())
-    if "dateString" not in df_recent:
-        raise ValueError("Recent data payload is missing dateString.")
-
-    df_recent["date"] = pd.to_datetime(df_recent["dateString"], utc=True)
-    df_recent = (
-        df_recent[["date", "sgv", "device"]]
-        .drop_duplicates()
-        .set_index("date")
-        .sort_index()
-    )
-
-    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=LINEPLOT_HOURS)
-    df_recent = df_recent.loc[df_recent.index >= cutoff].reset_index()
-
-    last_value = entries[0]
-    previous_value = entries[1] if len(entries) > 1 else entries[0]
-    return last_value, previous_value, df_recent
 
 
-def fetch_latest_entry() -> Dict[str, Any]:
-    """Fetch only the most recent CGM entry for minute-level refresh."""
-    response = requests.get(
-        f"https://{SITE}/api/v1/entries/sgv.json",
-        params={"count": 10},  # Fetch a few entries in case top ones are filtered
-        timeout=RECENT_REQUEST_TIMEOUT,
-    )
-    response.raise_for_status()
-    entries = response.json()
-    if not entries:
-        raise ValueError("Nightscout returned no latest entry.")
-    
-    # Filter out xDrip-NSFollower device
-    entries = [e for e in entries if e.get("device") != "xDrip-NSFollower"]
-    
-    if not entries:
-        raise ValueError("No valid entries after filtering devices.")
-    
-    return entries[0]
+def render_nightscout_settings_card(
+    on_saved: Optional[Callable[[], None]] = None, on_verify: Optional[Callable[[], None]] = None
+) -> NightscoutRefs:
+    storage = app.storage.user
+    stored_base = storage.get("ns_base_url") or ""
+    base_prefill = stored_base or DEFAULT_NIGHTSCOUT_URL or ""
 
+    expansion = ui.expansion(value=True).classes("w-full bg-transparent text-slate-100 ns-expansion")
+    with expansion.add_slot("header"):
+        with ui.row().classes("items-center justify-between w-full gap-3 pr-2"):
+            with ui.row().classes("items-center gap-2"):
+                ui.icon("link").classes("text-cyan-300")
+                ui.label("Nightscout Connection").classes("text-xs uppercase tracking-[0.5em] text-cyan-200")
+            status_dot = ui.icon("fiber_manual_record").classes("connection-dot hidden")
 
-def fetch_historical_data(days: int = 90, progress_callback: Optional[callable] = None) -> pd.DataFrame:
-    """Fetch 90 days of historical data in manageable chunks."""
-    chunk_size = 10_000
-    delay_between_requests = 3
-    request_timeout = 120
+    with expansion:
+        with ui.column().classes(
+            "w-full bg-[#0d1629]/95 border border-cyan-900/40 shadow-2xl shadow-black/40 "
+            "rounded-2xl px-6 py-5 text-slate-100 backdrop-blur"
+        ):
+            status_label = ui.label(
+                f"Current site: {stored_base or 'Not configured'}"
+            ).classes("text-xs text-slate-400 mb-3")
 
-    estimated_records = days * 1440
-    num_chunks = (estimated_records + chunk_size - 1) // chunk_size
-
-    all_data: list[Dict[str, Any]] = []
-    oldest_date: Optional[pd.Timestamp] = None
-
-    for index in range(num_chunks):
-        # Report progress
-        if progress_callback:
-            progress_callback(index + 1, num_chunks)
-        
-        if oldest_date is not None:
-            url = (
-                f"https://{SITE}/api/v1/entries/sgv.json?"
-                f"find[dateString][$lt]={oldest_date.isoformat()}&count={chunk_size}"
+            base_input = ui.input(
+                label="Base URL",
+                placeholder="https://mysite.herokuapp.com",
+                value=base_prefill,
+            ).props('type=url dark outlined dense color="cyan" label-color="cyan" input-class="night-input-text"').classes(
+                "night-input night-input-cyan w-full mb-3"
             )
-        else:
-            url = f"https://{SITE}/api/v1/entries/sgv.json?count={chunk_size}"
 
-        if index > 0:
-            time.sleep(delay_between_requests)
-
-        response = requests.get(url, timeout=request_timeout)
-        response.raise_for_status()
-        chunk_data = response.json()
-
-        if not chunk_data:
-            break
-
-        # Filter out xDrip-NSFollower device
-        chunk_data = [e for e in chunk_data if e.get("device") != "xDrip-NSFollower"]
-
-        all_data.extend(chunk_data)
-
-        if not chunk_data:
-            # If all data was filtered out, we need to get the last timestamp from the original chunk
-            # to continue pagination, so we need to re-fetch without filtering for pagination purposes
-            response = requests.get(url, timeout=request_timeout)
-            original_chunk = response.json()
-            if original_chunk:
-                newest_timestamp = pd.to_datetime(original_chunk[-1]["dateString"])
-                if isinstance(newest_timestamp, pd.Timestamp) and newest_timestamp.tzinfo is not None:
-                    newest_timestamp = newest_timestamp.tz_localize(None)
-                oldest_date = newest_timestamp if isinstance(newest_timestamp, pd.Timestamp) else None
-            continue
-
-        newest_timestamp = pd.to_datetime(chunk_data[-1]["dateString"])
-        if isinstance(newest_timestamp, pd.Timestamp) and newest_timestamp.tzinfo is not None:
-            newest_timestamp = newest_timestamp.tz_localize(None)
-
-        oldest_date = newest_timestamp if isinstance(newest_timestamp, pd.Timestamp) else None
-
-        target_start = pd.Timestamp.now() - pd.Timedelta(days=days)
-        if oldest_date is not None and oldest_date < target_start:
-            break
-
-    if not all_data:
-        raise ValueError("Nightscout returned no historical data.")
-
-    df_raw = pd.DataFrame(all_data)
-    df_raw["date"] = pd.to_datetime(df_raw["dateString"])
-    df_raw = (
-        df_raw[["date", "sgv", "device"]]
-        .drop_duplicates()
-        .set_index("date")
-        .sort_index()
-    )
-
-    df_3months = (
-        df_raw.resample("5 min")["sgv"]
-        .mean()
-        .reset_index()
-        .assign(
-            cat_glucose=lambda frame: pd.cut(
-                frame["sgv"],
-                bins=[
-                    0,
-                    TARGET_SEVERE_LOW,
-                    TARGET_LOW,
-                    TARGET_MILD_HIGH,
-                    TARGET_HIGH,
-                    TARGET_SEVERE_HIGH,
-                    np.inf,
-                ],
-                labels=BG_CATEGORIES,
+            token_input = ui.input(
+                label="Read token (preferred)",
+                placeholder="Optional",
+                password=True,
+                password_toggle_button=True,
+            ).props('dark outlined dense color="violet" label-color="violet" input-class="night-input-text"').classes(
+                "night-input night-input-violet w-full mb-2"
             )
+
+            secret_input = ui.input(
+                label="API secret (fallback)",
+                placeholder="Optional",
+                password=True,
+                password_toggle_button=True,
+            ).props('dark outlined dense color="violet" label-color="violet" input-class="night-input-text"').classes(
+                "night-input night-input-violet w-full mb-4"
+            )
+
+            ui.label(
+                "Use a Nightscout read-only token from Settings → API whenever possible. "
+                "Only fall back to the API secret if tokens are disabled; we hash it locally and send it via the api-secret header."
+            ).classes("text-xs text-slate-400 mb-5 leading-relaxed")
+
+        def save_settings() -> None:
+            base = _sanitize_base_url(base_input.value or "")
+            token = (token_input.value or "").strip()
+            secret = (secret_input.value or "").strip()
+
+            if not base:
+                ui.notify("Nightscout base URL is required.", type="warning")
+                return
+            if not token and not secret:
+                ui.notify("Provide a read token or API secret.", type="warning")
+                return
+
+            storage["ns_base_url"] = base
+            if token:
+                storage["ns_token"] = token
+            else:
+                storage.pop("ns_token", None)
+            if secret:
+                storage["ns_api_secret"] = secret
+            else:
+                storage.pop("ns_api_secret", None)
+
+            token_input.value = ""
+            secret_input.value = ""
+            status_label.text = f"Current site: {base}"
+            ui.notify("Nightscout settings saved.", type="positive")
+
+            if on_saved:
+                on_saved()
+            if on_verify:
+                on_verify()
+
+        ui.button("Save Nightscout settings", on_click=save_settings).classes(
+            "bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-50 font-mono uppercase tracking-[0.4em] "
+            "py-2 px-4 rounded-xl shadow-lg shadow-cyan-900/40 hover:opacity-90 transition"
         )
-    )
 
-    return df_3months
+    return NightscoutRefs(callout=None, expansion=expansion, status_label=status_label, status_dot=status_dot)
 
 
-# ============================================================================
-# Data helpers
-# ============================================================================
-
-def parse_entry_timestamp(entry: Optional[Dict[str, Any]]) -> Optional[pd.Timestamp]:
-    if not entry:
+def render_storage_secret_callout() -> Optional[Any]:
+    if STORAGE_SECRET_FROM_ENV:
         return None
-    ts_raw = entry.get("dateString") or entry.get("date")
-    if ts_raw is None:
-        return None
-    return pd.to_datetime(ts_raw, utc=True)
+    with ui.card().classes(
+        "w-full bg-amber-100 text-amber-950 border border-amber-500 shadow-lg "
+        "shadow-amber-900/20 ring-1 ring-amber-600 font-mono px-4 py-3"
+    ) as callout_card:
+        with ui.row().classes("items-start gap-3"):
+            ui.icon("warning_amber").classes("text-amber-600 text-3xl")
+            with ui.column().classes("gap-1"):
+                ui.label("Heads up: ephemeral storage secret").classes(
+                    "font-semibold text-sm uppercase tracking-[0.3em]"
+                )
+                ui.label(
+                    "Define STORAGE_SECRET in your container or shell to keep user Nightscout settings after a restart."
+                ).classes("text-xs leading-relaxed text-amber-900")
+    return callout_card
 
-
-def ensure_timezone_aware(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
-    if "date" not in df.columns:
-        raise ValueError("Dataframe missing 'date' column.")
-    if not is_datetime64_any_dtype(df["date"]):
-        df["date"] = pd.to_datetime(df["date"], utc=True)
-    return df
-
-
-async def ensure_historical_data(refs: Optional[Any] = None) -> None:
+async def ensure_historical_data(client: NightscoutClient, refs: Optional[Any] = None) -> None:
     """Load or fetch the 90-day historical dataset."""
     cached_df = load_historical_cache()
     if cached_df is not None:
@@ -342,25 +206,25 @@ async def ensure_historical_data(refs: Optional[Any] = None) -> None:
             # Direct content update
             refs.status_label.content = f'<span id="terminal-status" class="terminal-cursor">{progress_text}</span>'
     
-    df_3months = await asyncio.to_thread(fetch_historical_data, 90, progress_update)
+    df_3months = await fetch_historical_async(client, 90, progress_update)
     STATE.df_3months = df_3months
     save_historical_cache(df_3months)
     print(f"✓ Fetched and cached {len(df_3months)} historical records")
 
 
-async def refresh_recent_data(full_refresh: bool = False) -> None:
+async def refresh_recent_data(client: NightscoutClient, full_refresh: bool = False) -> None:
     """Refresh recent data, optionally doing a full fetch."""
     if full_refresh or STATE.df_recent.empty or STATE.last_value is None:
-        last_value, previous_value, df_recent = await asyncio.to_thread(fetch_recent_data)
+        last_value, previous_value, df_recent = await asyncio.to_thread(fetch_recent_data, client)
         df_recent = ensure_timezone_aware(df_recent)
         STATE.last_value = last_value
         STATE.previous_value = previous_value
         STATE.df_recent = df_recent
         STATE.fetched_at = time.time()
-        save_recent_cache()
+        save_recent_cache(STATE)
         return
 
-    latest_entry = await asyncio.to_thread(fetch_latest_entry)
+    latest_entry = await asyncio.to_thread(fetch_latest_entry, client)
     latest_ts = parse_entry_timestamp(latest_entry)
     cached_ts = parse_entry_timestamp(STATE.last_value)
 
@@ -396,386 +260,7 @@ async def refresh_recent_data(full_refresh: bool = False) -> None:
     STATE.previous_value = previous_value
     STATE.df_recent = df_recent
     STATE.fetched_at = time.time()
-    save_recent_cache()
-
-
-# ============================================================================
-# Chart builders
-# ============================================================================
-
-def create_placeholder_chart(title: str = "Loading...", height: int = 360) -> go.Figure:
-    """Create a styled placeholder chart matching the loaded chart aesthetics."""
-    fig = go.Figure()
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0f172a",
-        plot_bgcolor="#1e293b",
-        font=dict(color="#e2e8f0", family="JetBrains Mono, Consolas, monospace", size=11),
-        title=dict(text=title, font=dict(size=14, color="#94a3b8")),
-        xaxis=dict(showgrid=True, gridcolor="#334155", showticklabels=False),
-        yaxis=dict(showgrid=True, gridcolor="#334155", showticklabels=False),
-        height=height,
-        margin=dict(t=60, r=20, b=40, l=50),
-    )
-    return fig
-
-
-def build_recent_chart(df: pd.DataFrame) -> go.Figure:
-    """Build recent glucose line chart."""
-    if df.empty:
-        return create_placeholder_chart("No data yet")
-
-    # Convert timestamps to local timezone then to strings for JSON serialization
-    df_plot = df.copy()
-    # Convert to Europe/Madrid timezone before converting to string
-    df_plot["date"] = df_plot["date"].dt.tz_convert("Europe/Madrid").astype(str)
-    
-    fig = go.Figure()
-    
-    # Add line trace (without markers)
-    fig.add_trace(go.Scatter(
-        x=df_plot["date"],
-        y=df_plot["sgv"],
-        mode='lines',
-        line=dict(color="#8b5cf6", width=3),
-        name="Glucose",
-        hovertemplate="<b>%{y:.0f} mg/dL</b><br>%{x}<extra></extra>",
-    ))
-    
-    # Add marker only for the last point
-    if not df_plot.empty:
-        last_row = df_plot.iloc[-1]
-        fig.add_trace(go.Scatter(
-            x=[last_row["date"]],
-            y=[last_row["sgv"]],
-            mode='markers',
-            marker=dict(size=10, color="#8b5cf6", line=dict(width=2, color="#0f172a")),
-            name="Current",
-            hovertemplate="<b>Current: %{y:.0f} mg/dL</b><extra></extra>",
-        ))
-    
-    # Add target range bands
-    fig.add_hrect(
-        y0=TARGET_LOW, y1=TARGET_MILD_HIGH,
-        fillcolor=LIGHT_GREEN, opacity=0.1,
-        layer="below", line_width=0,
-    )
-    fig.add_hrect(
-        y0=TARGET_MILD_HIGH, y1=TARGET_HIGH,
-        fillcolor=MILD_YELLOW, opacity=0.1,
-        layer="below", line_width=0,
-    )
-    
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0f172a",
-        plot_bgcolor="#1e293b",
-        font=dict(color="#e2e8f0", family="JetBrains Mono, Consolas, monospace", size=11),
-        showlegend=False,
-        hovermode="x unified",
-        margin=dict(t=40, r=20, b=40, l=50),
-        height=280,
-        title_font=dict(size=14, color="#94a3b8"),
-    )
-    fig.update_yaxes(title="Glucose [mg/dL]", gridcolor="#334155", title_font=dict(color="#94a3b8"))
-    fig.update_xaxes(title=None, gridcolor="#334155")
-    return fig
-
-
-def build_tir_chart(selected_df: pd.DataFrame):
-    """Build TIR bar chart."""
-    if selected_df.empty:
-        return create_placeholder_chart("No data yet")
-    
-    tir_counts = selected_df["cat_glucose"].value_counts(normalize=True)
-    tir_data = pd.DataFrame(
-        {
-            "cat_glucose": BG_CATEGORIES,
-            "value": [tir_counts.get(cat, 0) for cat in BG_CATEGORIES],
-            "percent_label": [f"{(tir_counts.get(cat, 0) * 100):.0f}%" for cat in BG_CATEGORIES],
-        }
-    )
-    value_max = max(tir_data["value"].max(), 0.0001)
-
-    fig = px.bar(
-        tir_data,
-        x="cat_glucose",
-        y="value",
-        color="cat_glucose",
-        text="percent_label",
-        category_orders={"cat_glucose": BG_CATEGORIES},
-        color_discrete_map={
-            BG_CATEGORIES[0]: STRONG_RED,
-            BG_CATEGORIES[1]: LIGHT_RED,
-            BG_CATEGORIES[2]: LIGHT_GREEN,
-            BG_CATEGORIES[3]: MILD_YELLOW,
-            BG_CATEGORIES[4]: LIGHT_RED,
-            BG_CATEGORIES[5]: STRONG_RED,
-        },
-    )
-
-    fig.update_traces(textposition="outside", cliponaxis=False, width=0.8, textfont=dict(size=12, color="#e2e8f0"))
-    fig.update_yaxes(tickformat=".0%", title=None, range=[0, value_max * 1.15], gridcolor="#334155", title_font=dict(color="#94a3b8"))
-    fig.update_xaxes(title=None, tickangle=-45, gridcolor="#334155")
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0f172a",
-        plot_bgcolor="#1e293b",
-        font=dict(color="#e2e8f0", family="JetBrains Mono, Consolas, monospace", size=11),
-        showlegend=False,
-        height=360,
-        margin=dict(t=50, r=20, b=70, l=40),
-        title_font=dict(size=14, color="#94a3b8"),
-    )
-    return fig
-
-
-def build_histogram_chart(selected_df: pd.DataFrame) -> go.Figure:
-    """Build glucose histogram with TIR color mapping."""
-    if selected_df.empty:
-        return create_placeholder_chart("No data yet")
-    
-    # Filter out extreme values and cap at 300
-    df_hist = selected_df.copy()
-    df_hist['sgv_capped'] = df_hist['sgv'].clip(upper=300)
-    
-    # Create bins with 5 mg/dL width, last bin is ">300"
-    bins = list(range(0, 305, 5))
-    
-    # Calculate histogram
-    hist_data, bin_edges = np.histogram(df_hist['sgv_capped'], bins=bins)
-    
-    # Convert to percentages
-    total_count = hist_data.sum()
-    hist_pct = (hist_data / total_count * 100) if total_count > 0 else hist_data
-    
-    # Create bin centers and labels
-    bin_centers = [(bin_edges[i] + bin_edges[i+1]) / 2 for i in range(len(bin_edges)-1)]
-    bin_labels = [f"{int(bin_edges[i])}-{int(bin_edges[i+1])}" for i in range(len(bin_edges)-1)]
-    
-    # Assign colors based on TIR categories
-    def get_color_for_bin(bin_center):
-        if bin_center < TARGET_SEVERE_LOW:
-            return STRONG_RED
-        elif bin_center < TARGET_LOW:
-            return LIGHT_RED
-        elif bin_center <= TARGET_MILD_HIGH:
-            return LIGHT_GREEN
-        elif bin_center <= TARGET_HIGH:
-            return MILD_YELLOW
-        elif bin_center <= TARGET_SEVERE_HIGH:
-            return LIGHT_RED
-        else:
-            return STRONG_RED
-    
-    colors = [get_color_for_bin(center) for center in bin_centers]
-    
-    # Create the histogram figure
-    fig = go.Figure(data=[
-        go.Bar(
-            x=bin_centers,
-            y=hist_pct,
-            marker_color=colors,
-            width=4.5,  # Slightly less than bin width for visual separation
-            hovertemplate="<b>%{customdata}</b><br>%{y:.1f}%<extra></extra>",
-            customdata=bin_labels,
-        )
-    ])
-    
-    # Add target lines
-    for target, color, name in [
-        (TARGET_LOW, "#10b981", "Target Low"),
-        (TARGET_MILD_HIGH, "#10b981", "Target Mild High"),
-        (TARGET_HIGH, "#f59e0b", "High"),
-    ]:
-        fig.add_vline(
-            x=target,
-            line_dash="dash",
-            line_color=color,
-            opacity=0.7,
-            line_width=2,
-        )
-    
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0f172a",
-        plot_bgcolor="#1e293b",
-        font=dict(color="#e2e8f0", family="JetBrains Mono, Consolas, monospace", size=11),
-        showlegend=False,
-        height=360,
-        margin=dict(t=50, r=20, b=70, l=40),
-        title_font=dict(size=14, color="#94a3b8"),
-        xaxis=dict(
-            title="Glucose [mg/dL]",
-            gridcolor="#334155",
-            title_font=dict(color="#94a3b8"),
-            range=[0, 305],
-        ),
-        yaxis=dict(
-            title="Percentage",
-            gridcolor="#334155",
-            title_font=dict(color="#94a3b8"),
-            ticksuffix="%",
-        ),
-    )
-    
-    return fig
-
-
-def build_pattern_chart(sel_df: pd.DataFrame) -> tuple[go.Figure, str, int, int]:
-    """Build glucose pattern chart with quantile bands."""
-    if sel_df.empty:
-        fig = go.Figure(layout=dict(title="No data in range"))
-        fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#0f172a",
-            plot_bgcolor="#1e293b",
-            font=dict(color="#e2e8f0", family="JetBrains Mono, Consolas, monospace"),
-        )
-        return fig, "No data in range", 0, 0
-
-    window_text = f"{sel_df.date.min().date()} → {sel_df.date.max().date()}"
-    valid_sgv_count = int(sel_df.sgv.notna().sum())
-
-    quantiles = (
-        sel_df.dropna(subset=["sgv"])
-        .assign(hour=lambda frame: frame.date.dt.hour + frame.date.dt.minute / 60)
-        .groupby("hour", as_index=False)
-        .agg(
-            {
-                "sgv": [
-                    ("median", "median"),
-                    ("q90", lambda x: x.quantile(0.9)),
-                    ("q10", lambda x: x.quantile(0.1)),
-                    ("q25", lambda x: x.quantile(0.25)),
-                    ("q75", lambda x: x.quantile(0.75)),
-                ]
-            }
-        )
-    )
-    quantiles.columns = ["hour", "median", "q90", "q10", "q25", "q75"]
-
-    if len(quantiles) >= 10:
-        quantiles[["median", "q90", "q10", "q25", "q75"]] = (
-            quantiles[["median", "q90", "q10", "q25", "q75"]]
-            .rolling(window=10, center=True, min_periods=1)
-            .mean()
-        )
-
-    quantiles["hour_formatted"] = quantiles["hour"].apply(
-        lambda value: f"{int(value):02d}:{int((value % 1) * 60):02d}"
-    )
-
-    fig = go.Figure()
-
-    # 10-90th percentile band
-    fig.add_trace(
-        go.Scatter(
-            x=quantiles["hour"],
-            y=quantiles["q90"],
-            mode="lines",
-            line=dict(width=0),
-            showlegend=False,
-            hoverinfo="skip",
-        )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=quantiles["hour"],
-            y=quantiles["q10"],
-            mode="lines",
-            fill="tonexty",
-            fillcolor="rgba(139, 92, 246, 0.15)",
-            line=dict(color="rgba(139, 92, 246, 0.4)", width=1),
-            name="10-90th percentile",
-            hovertemplate="<b>10-90th:</b> %{customdata[1]:.0f}-%{customdata[2]:.0f} mg/dl<extra></extra>",
-            customdata=quantiles[["hour_formatted", "q10", "q90"]].values,
-        )
-    )
-
-    # 25-75th percentile band
-    fig.add_trace(
-        go.Scatter(
-            x=quantiles["hour"],
-            y=quantiles["q75"],
-            mode="lines",
-            line=dict(width=0),
-            showlegend=False,
-            hoverinfo="skip",
-        )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=quantiles["hour"],
-            y=quantiles["q25"],
-            mode="lines",
-            fill="tonexty",
-            fillcolor="rgba(139, 92, 246, 0.35)",
-            line=dict(color="rgba(139, 92, 246, 0.7)", width=1.5),
-            name="25-75th percentile",
-            hovertemplate="<b>25-75th:</b> %{customdata[1]:.0f}-%{customdata[2]:.0f} mg/dl<extra></extra>",
-            customdata=quantiles[["hour_formatted", "q25", "q75"]].values,
-        )
-    )
-
-    # Median line
-    fig.add_trace(
-        go.Scatter(
-            x=quantiles["hour"],
-            y=quantiles["median"],
-            mode="lines",
-            line=dict(color="#a78bfa", width=3, shape="spline"),
-            name="Median",
-            hovertemplate="<b>Median:</b> %{y:.0f} mg/dl<extra></extra>",
-        )
-    )
-
-    # Target lines
-    for target, text, color in [
-        (TARGET_LOW, "Target Low", "#10b981"),
-        (TARGET_MILD_HIGH, "Target Mild High", "#10b981"),
-        (TARGET_HIGH, "High", "#f59e0b"),
-    ]:
-        fig.add_hline(
-            y=target,
-            line_dash="dash",
-            line_color=color,
-            opacity=0.7,
-            line_width=2,
-            annotation_text=text,
-            annotation_position="right",
-            annotation=dict(font_size=10, font_color=color, font_family="JetBrains Mono, Consolas, monospace"),
-        )
-
-    fig.update_xaxes(
-        title=None,
-        tickvals=[0, 3, 6, 9, 12, 15, 18, 21],
-        ticktext=["0h", "3h", "6h", "9h", "12h", "15h", "18h", "21h"],
-        showgrid=True,
-        gridwidth=1,
-        gridcolor="#334155",
-    )
-    fig.update_yaxes(
-        title="Glucose [mg/dL]",
-        range=[40, None],
-        showgrid=True,
-        gridwidth=1,
-        gridcolor="#334155",
-        title_font=dict(color="#94a3b8"),
-    )
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#0f172a",
-        plot_bgcolor="#1e293b",
-        font=dict(color="#e2e8f0", family="JetBrains Mono, Consolas, monospace", size=11),
-        margin=dict(t=60, r=30, b=40, l=60),
-        height=400,
-        hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, bgcolor="rgba(30, 41, 59, 0.8)"),
-        title_font=dict(size=14, color="#94a3b8"),
-    )
-
-    return fig, window_text, valid_sgv_count, len(quantiles)
+    save_recent_cache(STATE)
 
 
 # ============================================================================
@@ -808,6 +293,14 @@ class UIRefs:
     status_label: Any
     status_card: Any
     loading_spinner: Any
+
+
+@dataclass
+class NightscoutRefs:
+    callout: Optional[Any]
+    expansion: Any
+    status_label: Any
+    status_dot: Any
 
 
 def update_hero(refs: UIRefs) -> None:
@@ -860,7 +353,7 @@ def update_summary_cards(refs: UIRefs) -> None:
         refs.hba1c_label.text = "--"
         refs.dataset_label.text = "--"
         refs.hypo_label.text = "--"
-        refs.tir_chart.update_figure(px.bar(title="No historical data"))
+        refs.tir_chart.update_figure(create_placeholder_chart("No historical data"))
         return
 
     period_days = {
@@ -924,7 +417,7 @@ def update_pattern_section(refs: UIRefs) -> None:
     """Update the glucose patterns chart."""
     if STATE.df_3months.empty:
         refs.pattern_status.text = "✗ Historical data unavailable"
-        refs.pattern_chart.update_figure(go.Figure(layout=dict(title="No data")))
+        refs.pattern_chart.update_figure(create_placeholder_chart("No historical data", height=400))
         return
 
     start_value = refs.pattern_start_input.value
@@ -932,7 +425,7 @@ def update_pattern_section(refs: UIRefs) -> None:
     
     if not start_value or not end_value:
         refs.pattern_status.text = "⚠ Select a valid date range"
-        refs.pattern_chart.update_figure(go.Figure(layout=dict(title="No data")))
+        refs.pattern_chart.update_figure(create_placeholder_chart("Pick start/end dates", height=400))
         return
 
     # Parse dates as timezone-naive timestamps
@@ -948,12 +441,12 @@ def update_pattern_section(refs: UIRefs) -> None:
             
     except Exception as e:
         refs.pattern_status.text = f"✗ Invalid date: {e}"
-        refs.pattern_chart.update_figure(go.Figure(layout=dict(title="No data")))
+        refs.pattern_chart.update_figure(create_placeholder_chart("Invalid dates", height=400))
         return
 
     if start_dt > end_dt:
         refs.pattern_status.text = "✗ Start date must be ≤ end date"
-        refs.pattern_chart.update_figure(go.Figure(layout=dict(title="No data")))
+        refs.pattern_chart.update_figure(create_placeholder_chart("Invalid range", height=400))
         return
     
     end_dt = end_dt + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
@@ -969,7 +462,7 @@ def update_pattern_section(refs: UIRefs) -> None:
         df_filtered = df_copy[mask]
     except Exception as e:
         refs.pattern_status.text = f"✗ Filter error: {str(e)[:50]}"
-        refs.pattern_chart.update_figure(go.Figure(layout=dict(title="No data")))
+        refs.pattern_chart.update_figure(create_placeholder_chart("Filter error", height=400))
         return
 
     fig, window_text, valid_sgv, points = build_pattern_chart(df_filtered)
@@ -988,7 +481,10 @@ def update_dashboard(refs: UIRefs) -> None:
 async def periodic_refresh(refs: UIRefs) -> None:
     """Background task for minute-level hero refresh."""
     try:
-        await refresh_recent_data(full_refresh=False)
+        client = get_client_from_storage()
+        if client is None:
+            return
+        await refresh_recent_data(client, full_refresh=False)
         update_hero(refs)
         update_recent_chart(refs)
     except Exception as exc:
@@ -1010,6 +506,14 @@ async def index_page() -> None:
     ui.add_head_html('<link rel="stylesheet" href="/static/style.css">')
     ui.add_head_html('<script src="/static/script.js"></script>')
 
+    load_task: Optional[asyncio.Task] = None
+
+    def schedule_initial_load() -> None:
+        nonlocal load_task
+        if load_task and not load_task.done():
+            return
+        load_task = asyncio.create_task(load_initial_data())
+
     with ui.column().classes("w-full max-w-6xl mx-auto py-10 gap-6"):
         # Header with terminal aesthetic
         with ui.row().classes("items-center gap-3 mb-2"):
@@ -1019,6 +523,39 @@ async def index_page() -> None:
             loading_spinner = ui.spinner(size="lg", color="violet").classes("ml-auto")
             loading_spinner.set_visibility(False)
         ui.label("Real-time CGM monitoring // live refresh every 60s").classes("text-sm text-slate-500 font-mono")
+
+        callout_card = render_storage_secret_callout()
+
+        def handle_connection_verified() -> None:
+            storage = app.storage.user
+            base = storage.get("ns_base_url") or "Nightscout"
+            if connection_refs.callout:
+                connection_refs.callout.set_visibility(False)
+                connection_refs.callout = None
+            connection_refs.status_label.text = f"Connected · {base}"
+            connection_refs.expansion.value = False
+            connection_refs.status_dot.classes(remove="hidden connection-dot-error", add="connection-dot-active")
+            connection_refs.status_dot.set_visibility(True)
+
+        async def verify_connection_settings() -> None:
+            client = get_client_from_storage()
+            if client is None:
+                return
+            try:
+                await asyncio.to_thread(lambda: client.get_sgv(count=1))
+            except Exception as exc:
+                connection_refs.status_label.text = f"Connection failed: {exc}"
+                connection_refs.status_dot.set_visibility(True)
+                connection_refs.status_dot.classes(remove="hidden connection-dot-active", add="connection-dot-error")
+            else:
+                handle_connection_verified()
+
+        def on_settings_saved() -> None:
+            schedule_initial_load()
+            asyncio.create_task(verify_connection_settings())
+
+        connection_refs = render_nightscout_settings_card(on_saved=on_settings_saved)
+        connection_refs.callout = callout_card
         
         # Status banner - terminal-style output
         with ui.card().classes("w-full bg-black border-2 border-green-500 shadow-lg") as status_card:
@@ -1170,57 +707,65 @@ async def index_page() -> None:
 
     # Load and fetch data in the background (after page renders)
     async def load_initial_data():
-        # Show loading spinner
         refs.loading_spinner.set_visibility(True)
-        
-        # Initial message
-        await type_status("$ init system...")
-        await asyncio.sleep(0.3)
-        
-        # Load cached data
-        load_recent_cache()
+        try:
+            await type_status("$ init system...")
+            await asyncio.sleep(0.3)
 
-        # Fetch historical data with status updates
-        await type_status("$ fetch --historical --days=90")
-        refs.pattern_status.text = "⏳ Loading from cache/API..."
-        
-        await ensure_historical_data(refs)
-        
-        # Update status based on whether data was cached or fetched
-        if not STATE.df_3months.empty:
-            cache_path = Path(".cache/nicegui_historical.pkl")
-            if cache_path.exists():
-                cache_age = time.time() - cache_path.stat().st_mtime
-                refs.pattern_status.text = f"✓ Cached ({int(cache_age/60)}m old) · {len(STATE.df_3months):,} records"
-            else:
-                refs.pattern_status.text = f"✓ Fetched from API · {len(STATE.df_3months):,} records"
-        
-        # Fetch recent data
-        await type_status("$ fetch --recent --hours=4")
-        await refresh_recent_data(full_refresh=STATE.df_recent.empty)
+            load_recent_cache(STATE)
 
-        # Initialize pattern date inputs
-        if not STATE.df_3months.empty:
-            data_min = STATE.df_3months.date.min().date()
-            data_max = STATE.df_3months.date.max().date()
-            refs.pattern_start_input.value = str(data_min)
-            refs.pattern_end_input.value = str(data_max)
+            client = get_client_from_storage()
+            if client is None:
+                refs.pattern_status.text = "✗ Configure Nightscout settings above to load data"
+                await type_status("$ waiting --nightscout-config")
+                return
 
-        # Initial render
-        update_dashboard(refs)
-        await type_status("$ system ready [OK] · refresh_interval=60s")
-        
-        # Hide loading spinner and transition to idle state
-        refs.loading_spinner.set_visibility(False)
-        await asyncio.sleep(1.5)
-        
-        # Fade to semi-transparent idle message with blinking cursor
-        status_label.content = '<span id="terminal-status" class="terminal-cursor">$ Monitoring live data · Listening for device updates...</span>'
-        refs.status_card.classes(remove="border-green-500", add="border-green-500/30")
-        status_container.classes(remove="text-green-300", add="text-green-300/50")
+            await type_status("$ fetch --historical --days=90")
+            refs.pattern_status.text = "⏳ Loading from cache/API..."
+            await ensure_historical_data(client, refs)
+
+            if not STATE.df_3months.empty:
+                cache_path = Path(".cache/nicegui_historical.pkl")
+                if cache_path.exists():
+                    cache_age = time.time() - cache_path.stat().st_mtime
+                    refs.pattern_status.text = f"✓ Cached ({int(cache_age/60)}m old) · {len(STATE.df_3months):,} records"
+                else:
+                    refs.pattern_status.text = f"✓ Fetched from API · {len(STATE.df_3months):,} records"
+
+            await type_status("$ fetch --recent --hours=4")
+
+            client = get_client_from_storage()
+            if client is None:
+                refs.pattern_status.text = "✗ Nightscout settings removed; re-enter to continue."
+                await type_status("$ waiting --nightscout-config")
+                return
+
+            await refresh_recent_data(client, full_refresh=True)
+
+            if not STATE.df_3months.empty:
+                data_min = STATE.df_3months.date.min().date()
+                data_max = STATE.df_3months.date.max().date()
+                refs.pattern_start_input.value = str(data_min)
+                refs.pattern_end_input.value = str(data_max)
+
+            update_dashboard(refs)
+            handle_connection_verified()
+            await type_status("$ system ready [OK] · refresh_interval=60s")
+
+            refs.loading_spinner.set_visibility(False)
+            await asyncio.sleep(1.5)
+
+            status_label.content = '<span id="terminal-status" class="terminal-cursor">$ Monitoring live data · Listening for device updates...</span>'
+            refs.status_card.classes(remove="border-green-500", add="border-green-500/30")
+            status_container.classes(remove="text-green-300", add="text-green-300/50")
+        except Exception as exc:
+            refs.pattern_status.text = f"✗ Error: {exc}"
+            await type_status(f"$ error -- {exc}")
+        finally:
+            refs.loading_spinner.set_visibility(False)
 
     # Trigger background data load
-    asyncio.create_task(load_initial_data())
+    schedule_initial_load()
 
 
 @ui.page("/health")
@@ -1231,8 +776,6 @@ def healthcheck() -> None:
 
 if __name__ in {"__main__", "__mp_main__"}:
     # Add static files route for assets
-    from nicegui import app
-
     app.add_static_files('/static', str(Path(__file__).parent / 'static'))
 
     port = int(os.environ.get("PORT", "8080"))
@@ -1243,5 +786,6 @@ if __name__ in {"__main__", "__mp_main__"}:
         host="0.0.0.0",
         port=port,
         reload=reload_enabled,
+        storage_secret=STORAGE_SECRET,
         favicon='static/favicon.png',
     )
