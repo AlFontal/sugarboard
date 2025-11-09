@@ -5,12 +5,17 @@ services:
     build: .
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     environment:
       # Add any environment variables here
       - PYTHONUNBUFFERED=1
+      - STORAGE_SECRET=${STORAGE_SECRET}
     volumes:
       # Persist cache directory between container restarts
       - sugarboard-cache:/app/.cache
+      # Persist NiceGUI user storage (Nightscout credentials, etc.)
+      - sugarboard-storage:/app/.nicegui
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health', timeout=5)"]
@@ -21,3 +26,4 @@ services:
 
 volumes:
   sugarboard-cache:
+  sugarboard-storage:

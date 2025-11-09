@@ -118,18 +118,22 @@ You can pass environment variables in docker-compose.yml or via -e flag:
 
 ```yaml
 environment:
-  - CGM_SITE=your-site.herokuapp.com
+  - CGM_SITE=https://your-site.herokuapp.com  # optional: pre-fills the UI form
+  - STORAGE_SECRET=change-me-super-secret    # required for NiceGUI user storage
   - TZ=Europe/Madrid
+
+> The Nightscout read token or API secret is entered at runtime through the dashboard's "Nightscout Connection" card; do not bake it into the container environment.
 ```
 
-### Persistent Cache
+### Persistent Cache & Credentials
 
-To persist the cache between container restarts, mount a volume:
+To persist the cache and NiceGUI user storage (Nightscout credentials), mount volumes:
 
 ```bash
 docker run -d \
   -p 8080:8080 \
   -v $(pwd)/cache_data:/app/.cache \
+  -v $(pwd)/storage_data:/app/.nicegui \
   sugarboard:latest
 ```
 
