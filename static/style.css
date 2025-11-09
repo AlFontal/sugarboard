@@ -41,3 +41,58 @@ body {
 @keyframes blink {
     50% { opacity: 0; }
 }
+
+.night-input .q-field__control {
+    background: rgba(15, 23, 42, 0.85) !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(14, 165, 233, 0.25);
+}
+
+.night-input-violet .q-field__control {
+    border-color: rgba(139, 92, 246, 0.35) !important;
+}
+
+.night-input .q-field__native,
+.night-input .q-field__label {
+    color: #e2e8f0 !important;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.night-input .q-field__bottom {
+    color: rgba(226, 232, 240, 0.7) !important;
+}
+
+.night-input .q-field__control:hover {
+    border-color: rgba(56, 189, 248, 0.6) !important;
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35) inset;
+}
+
+.night-input-violet .q-field__control:hover {
+    border-color: rgba(167, 139, 250, 0.8) !important;
+    box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.35) inset;
+}
+
+.connection-dot {
+    margin-left: auto;
+    color: rgba(148, 163, 184, 0.5);
+    font-size: 0.9rem;
+    transition: color 0.3s ease, opacity 0.3s ease;
+    opacity: 0.4;
+}
+
+.connection-dot-active {
+    color: #4ade80 !important;
+    opacity: 1;
+    animation: connectionPulse 1.4s ease-in-out infinite;
+}
+
+.connection-dot-error {
+    color: #f87171 !important;
+    opacity: 1;
+    animation: none;
+}
+
+@keyframes connectionPulse {
+    0%, 100% { transform: scale(0.9); opacity: 0.8; }
+    50% { transform: scale(1.15); opacity: 1; }
+}
