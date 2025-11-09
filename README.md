@@ -6,6 +6,10 @@
 
 Modern [NiceGUI](https://nicegui.io/) dashboard for personal Continuous Glucose Monitoring data powered by the [Nightscout](http://www.nightscout.info/) API. The project runs exclusively as a NiceGUI app and is designed to be deployed via Docker (compose or standalone).
 
+<img width="1800" height="1100" alt="sugarboard_screenshot" src="https://github.com/user-attachments/assets/3a30d0f9-8bb5-4a53-bd23-46223c129ee2" />
+
+
+
 ## Quick Start (Docker Compose)
 
 ```bash
