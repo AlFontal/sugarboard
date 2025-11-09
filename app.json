@@ -1,9 +1,10 @@
 {
     "name": "sugarboard",
-    "description": "Streamlit App displaying personal glucose monitoring stats.",
+    "description": "NiceGUI dashboard for personal glucose monitoring data.",
     "repository": "https://github.com/AlFontal/sugarboard",
     "keywords": [
-        "streamlit",
-        "python"
+        "nicegui",
+        "python",
+        "nightscout"
     ]
 }
