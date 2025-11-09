@@ -1,5 +1,9 @@
 # Sugarboard
 
+[![Docker Ready](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](DOCKER.md)
+[![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/release/python-3110/)
+[![NiceGUI 2](https://img.shields.io/badge/NiceGUI-2.0-9333EA)](https://nicegui.io/)
+
 Modern [NiceGUI](https://nicegui.io/) dashboard for personal Continuous Glucose Monitoring data powered by the [Nightscout](http://www.nightscout.info/) API. The project runs exclusively as a NiceGUI app and is designed to be deployed via Docker (compose or standalone).
 
 ## Quick Start (Docker Compose)
@@ -12,13 +16,33 @@ docker-compose up -d --build
 
 The NiceGUI server will be exposed on [http://localhost:8080](http://localhost:8080). Logs can be tailed with `docker-compose logs -f sugarboard`, and `docker-compose down` stops the stack. The compose file also mounts a named volume to persist cached CGM data between restarts.
 
+### Nightscout Credentials
+
+When the dashboard loads, fill in the **Nightscout Connection** card with your base URL plus either:
+
+- **Read token (recommended):** create a read-only API token inside your Nightscout instance (`Settings → API → Add Token`). This grants GET access without exposing the master secret.
+- **API secret:** the classic admin secret string (we hash it and send it via the `api-secret` header). Only use this if you have tokens disabled.
+
+Credentials stay on the server and are never rendered back to the browser. If you set the optional `CGM_SITE` environment variable, it simply pre-fills the base URL field for convenience.
+
 ### Configuration
 
-- `CGM_SITE`: override the Nightscout base hostname (defaults to `cgm-monitor-alfontal.herokuapp.com` in code).
+- Runtime credentials: provided through the UI card described above.
+- `STORAGE_SECRET`: required for NiceGUI's secure server-side storage (set to any long random string).
 - `TZ`: optional timezone for the container.
 - Cache persistence: by default a Docker volume named `sugarboard-cache` stores `.cache/`.
+- Credential persistence: another volume `sugarboard-storage` stores `.nicegui/` so saved Nightscout credentials survive rebuilds.
 
-Set these in `docker-compose.yml` (see `DOCKER.md` for other deployment targets).
+Set the non-interactive settings in `docker-compose.yml` (see `DOCKER.md` for other deployment targets). The Nightscout token/secret should always be entered via the UI.
+
+To keep secrets out of version control, place them in a local `.env` file (already git-ignored) and let Docker Compose load it:
+
+```bash
+python - <<'PY' > .env
+from secrets import token_hex
+print(f"STORAGE_SECRET={token_hex(32)}")
+PY
+```
 
 ## Local Development (optional, without Docker)
 
