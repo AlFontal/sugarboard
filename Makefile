@@ -1,7 +1,7 @@
 .PHONY: run lint test test-e2e install prod-install clean
 
 run: install
-	./venv/bin/python -m streamlit run streamlit_app.py
+	NICEGUI_RELOAD=true ./venv/bin/python nicegui_app.py
 
 lint: install
 	./venv/bin/python -m black .

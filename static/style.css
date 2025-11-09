@@ -1,0 +1,43 @@
+/* Custom styles for SugarBoard NiceGUI Dashboard */
+
+body { 
+    font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace !important; 
+}
+
+/* Compact date pickers */
+.q-field--outlined .q-field__control { 
+    min-height: 40px !important; 
+}
+
+.q-date { 
+    max-width: 280px !important; 
+}
+
+.q-date__header { 
+    background: #1e293b !important; 
+}
+
+.q-date__view { 
+    background: #0f172a !important; 
+}
+
+/* Card hover animations */
+.q-card { 
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important; 
+}
+
+.q-card:hover { 
+    transform: translateY(-4px); 
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.3) !important; 
+}
+
+/* Terminal cursor animation */
+.terminal-cursor::after {
+    content: '▊';
+    animation: blink 1s step-end infinite;
+    margin-left: 2px;
+}
+
+@keyframes blink {
+    50% { opacity: 0; }
+}
