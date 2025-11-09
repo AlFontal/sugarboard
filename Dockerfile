@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY nicegui_app.py .
 COPY src/ ./src/
-COPY assets/ ./assets/
+COPY static/ ./static/
 
 # Create cache directory
 RUN mkdir -p .cache
