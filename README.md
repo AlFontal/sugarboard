@@ -33,6 +33,7 @@ Credentials stay on the server and are never rendered back to the browser. If yo
 
 - Runtime credentials: provided through the UI card described above.
 - `STORAGE_SECRET`: required for NiceGUI's secure server-side storage (set to any long random string).
+- `RECENT_REQUEST_TIMEOUT`: Nightscout API timeout in seconds (defaults to 60). Increase if your server responds slowly.
 - `TZ`: optional timezone for the container.
 - Cache persistence: by default a Docker volume named `sugarboard-cache` stores `.cache/`.
 - Credential persistence: another volume `sugarboard-storage` stores `.nicegui/` so saved Nightscout credentials survive rebuilds.

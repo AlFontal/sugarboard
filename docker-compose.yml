@@ -11,6 +11,8 @@ services:
       # Add any environment variables here
       - PYTHONUNBUFFERED=1
       - STORAGE_SECRET=${STORAGE_SECRET}
+      # Increase timeout for slow Nightscout deployments (seconds)
+      - RECENT_REQUEST_TIMEOUT=${RECENT_REQUEST_TIMEOUT:-45}
     volumes:
       # Persist cache directory between container restarts
       - sugarboard-cache:/app/.cache

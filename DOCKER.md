@@ -120,6 +120,7 @@ You can pass environment variables in docker-compose.yml or via -e flag:
 environment:
   - CGM_SITE=https://your-site.herokuapp.com  # optional: pre-fills the UI form
   - STORAGE_SECRET=change-me-super-secret    # required for NiceGUI user storage
+  - RECENT_REQUEST_TIMEOUT=60               # optional: bump Nightscout timeout
   - TZ=Europe/Madrid
 
 > The Nightscout read token or API secret is entered at runtime through the dashboard's "Nightscout Connection" card; do not bake it into the container environment.
