@@ -50,6 +50,7 @@ from src.state import DataState
 from src.utils import mean_glucose_to_hba1c
 
 STATE = DataState()
+CACHED_CREDENTIAL_PLACEHOLDER = "[saved credential]"
 
 
 def _sanitize_base_url(value: str) -> str:
@@ -76,7 +77,11 @@ def render_nightscout_settings_card(
 ) -> NightscoutRefs:
     storage = app.storage.user
     stored_base = storage.get("ns_base_url") or ""
+    stored_token = storage.get("ns_token") or ""
+    stored_secret = storage.get("ns_api_secret") or ""
     base_prefill = stored_base or DEFAULT_NIGHTSCOUT_URL or ""
+    token_prefilled = bool(stored_token)
+    secret_prefilled = bool(stored_secret)
 
     expansion = ui.expansion(value=True).classes("w-full bg-transparent text-slate-100 ns-expansion")
     with expansion.add_slot("header"):
@@ -84,7 +89,7 @@ def render_nightscout_settings_card(
             with ui.row().classes("items-center gap-2"):
                 ui.icon("link").classes("text-cyan-300")
                 ui.label("Nightscout Connection").classes("text-xs uppercase tracking-[0.5em] text-cyan-200")
-            status_dot = ui.icon("fiber_manual_record").classes("connection-dot hidden")
+                status_dot = ui.icon("fiber_manual_record").classes("connection-dot hidden ml-2")
 
     with expansion:
         with ui.column().classes(
@@ -108,6 +113,7 @@ def render_nightscout_settings_card(
                 placeholder="Optional",
                 password=True,
                 password_toggle_button=True,
+                value=CACHED_CREDENTIAL_PLACEHOLDER if token_prefilled else "",
             ).props('dark outlined dense color="violet" label-color="violet" input-class="night-input-text"').classes(
                 "night-input night-input-violet w-full mb-2"
             )
@@ -117,6 +123,7 @@ def render_nightscout_settings_card(
                 placeholder="Optional",
                 password=True,
                 password_toggle_button=True,
+                value=CACHED_CREDENTIAL_PLACEHOLDER if secret_prefilled else "",
             ).props('dark outlined dense color="violet" label-color="violet" input-class="night-input-text"').classes(
                 "night-input night-input-violet w-full mb-4"
             )
@@ -128,13 +135,23 @@ def render_nightscout_settings_card(
 
         def save_settings() -> None:
             base = _sanitize_base_url(base_input.value or "")
-            token = (token_input.value or "").strip()
-            secret = (secret_input.value or "").strip()
+            raw_token = (token_input.value or "").strip()
+            raw_secret = (secret_input.value or "").strip()
+
+            def resolve_secret(raw_value: str, stored_value: str) -> tuple[str, bool]:
+                if raw_value:
+                    if raw_value == CACHED_CREDENTIAL_PLACEHOLDER and stored_value:
+                        return stored_value, True
+                    return raw_value, True
+                return "", False
+
+            token, has_token = resolve_secret(raw_token, stored_token)
+            secret, has_secret = resolve_secret(raw_secret, stored_secret)
 
             if not base:
                 ui.notify("Nightscout base URL is required.", type="warning")
                 return
-            if not token and not secret:
+            if not has_token and not has_secret:
                 ui.notify("Provide a read token or API secret.", type="warning")
                 return
 
@@ -525,37 +542,67 @@ async def index_page() -> None:
         ui.label("Real-time CGM monitoring // live refresh every 60s").classes("text-sm text-slate-500 font-mono")
 
         callout_card = render_storage_secret_callout()
+        storage = app.storage.user
+        has_saved_auth = bool(storage.get("ns_base_url") and (storage.get("ns_token") or storage.get("ns_api_secret")))
+        prefill_verification_pending = has_saved_auth
 
         def handle_connection_verified() -> None:
-            storage = app.storage.user
+            nonlocal prefill_verification_pending
             base = storage.get("ns_base_url") or "Nightscout"
             if connection_refs.callout:
                 connection_refs.callout.set_visibility(False)
                 connection_refs.callout = None
-            connection_refs.status_label.text = f"Connected · {base}"
+            suffix = " (verified from saved credentials)" if prefill_verification_pending else ""
+            connection_refs.status_label.text = f"Connected · {base}{suffix}"
             connection_refs.expansion.value = False
-            connection_refs.status_dot.classes(remove="hidden connection-dot-error", add="connection-dot-active")
+            connection_refs.status_dot.classes(
+                remove="hidden connection-dot-error connection-dot-pending",
+                add="connection-dot-active",
+            )
             connection_refs.status_dot.set_visibility(True)
+            prefill_verification_pending = False
 
         async def verify_connection_settings() -> None:
+            nonlocal prefill_verification_pending
             client = get_client_from_storage()
             if client is None:
+                prefill_verification_pending = False
                 return
             try:
                 await asyncio.to_thread(lambda: client.get_sgv(count=1))
             except Exception as exc:
+                prefill_verification_pending = False
                 connection_refs.status_label.text = f"Connection failed: {exc}"
                 connection_refs.status_dot.set_visibility(True)
-                connection_refs.status_dot.classes(remove="hidden connection-dot-active", add="connection-dot-error")
+                connection_refs.status_dot.classes(
+                    remove="hidden connection-dot-active connection-dot-pending",
+                    add="connection-dot-error",
+                )
             else:
                 handle_connection_verified()
 
         def on_settings_saved() -> None:
+            nonlocal prefill_verification_pending
+            prefill_verification_pending = False
+            base = storage.get("ns_base_url") or "Nightscout"
+            show_connection_pending(f"Testing connection to {base}...")
             schedule_initial_load()
             asyncio.create_task(verify_connection_settings())
 
         connection_refs = render_nightscout_settings_card(on_saved=on_settings_saved)
         connection_refs.callout = callout_card
+
+        def show_connection_pending(message: str) -> None:
+            connection_refs.status_label.text = message
+            connection_refs.status_dot.set_visibility(True)
+            connection_refs.status_dot.classes(
+                remove="hidden connection-dot-active connection-dot-error",
+                add="connection-dot-pending",
+            )
+
+        if has_saved_auth:
+            base = storage.get("ns_base_url") or "Nightscout"
+            show_connection_pending(f"Testing saved credentials for {base}...")
         
         # Status banner - terminal-style output
         with ui.card().classes("w-full bg-black border-2 border-green-500 shadow-lg") as status_card:
@@ -707,6 +754,7 @@ async def index_page() -> None:
 
     # Load and fetch data in the background (after page renders)
     async def load_initial_data():
+        nonlocal prefill_verification_pending
         refs.loading_spinner.set_visibility(True)
         try:
             await type_status("$ init system...")
@@ -716,6 +764,7 @@ async def index_page() -> None:
 
             client = get_client_from_storage()
             if client is None:
+                prefill_verification_pending = False
                 refs.pattern_status.text = "✗ Configure Nightscout settings above to load data"
                 await type_status("$ waiting --nightscout-config")
                 return
@@ -759,8 +808,15 @@ async def index_page() -> None:
             refs.status_card.classes(remove="border-green-500", add="border-green-500/30")
             status_container.classes(remove="text-green-300", add="text-green-300/50")
         except Exception as exc:
+            prefill_verification_pending = False
             refs.pattern_status.text = f"✗ Error: {exc}"
             await type_status(f"$ error -- {exc}")
+            connection_refs.status_label.text = f"Connection failed: {exc}"
+            connection_refs.status_dot.set_visibility(True)
+            connection_refs.status_dot.classes(
+                remove="hidden connection-dot-active connection-dot-pending",
+                add="connection-dot-error",
+            )
         finally:
             refs.loading_spinner.set_visibility(False)
 
