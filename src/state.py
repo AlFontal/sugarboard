@@ -15,6 +15,7 @@ class DataState:
     df_recent: pd.DataFrame = field(default_factory=pd.DataFrame)
     df_3months: pd.DataFrame = field(default_factory=pd.DataFrame)
     fetched_at: Optional[float] = None
+    theme: str = "dark"
 
 
 __all__ = ["DataState"]

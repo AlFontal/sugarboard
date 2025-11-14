@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -19,6 +20,7 @@ from nicegui import app, ui
 
 from src.cache import load_historical_cache, load_recent_cache, save_historical_cache, save_recent_cache
 from src.charts import (
+    build_heatmap_chart,
     build_histogram_chart,
     build_pattern_chart,
     build_recent_chart,
@@ -51,6 +53,28 @@ from src.utils import mean_glucose_to_hba1c
 
 STATE = DataState()
 CACHED_CREDENTIAL_PLACEHOLDER = "[saved credential]"
+DEFAULT_THEME = "dark"
+THEME_STORAGE_KEY = "ui_theme"
+DARK_BODY_CLASSES = "dark-theme text-slate-100"
+LIGHT_BODY_CLASSES = "light-theme text-slate-900"
+THEME_CLASS_RESET = f"{DARK_BODY_CLASSES} {LIGHT_BODY_CLASSES} bg-slate-950 bg-slate-50"
+
+
+def apply_theme_classes(theme: str) -> None:
+    """Apply the selected theme classes to the document body."""
+    body = ui.query("body")
+    body.classes(
+        remove=THEME_CLASS_RESET,
+        add=LIGHT_BODY_CLASSES if theme == "light" else DARK_BODY_CLASSES,
+    )
+
+
+def set_active_theme(theme: str, storage: Optional[dict[str, Any]] = None) -> None:
+    """Persist and apply the active theme."""
+    STATE.theme = theme if theme in {"dark", "light"} else DEFAULT_THEME
+    if storage is not None:
+        storage[THEME_STORAGE_KEY] = STATE.theme
+    apply_theme_classes(STATE.theme)
 
 
 def _sanitize_base_url(value: str) -> str:
@@ -93,7 +117,7 @@ def render_nightscout_settings_card(
 
     with expansion:
         with ui.column().classes(
-            "w-full bg-[#0d1629]/95 border border-cyan-900/40 shadow-2xl shadow-black/40 "
+            "ns-settings-card w-full bg-[#0d1629]/95 border border-cyan-900/40 shadow-2xl shadow-black/40 "
             "rounded-2xl px-6 py-5 text-slate-100 backdrop-blur"
         ):
             status_label = ui.label(
@@ -304,6 +328,7 @@ class UIRefs:
     histogram_chart: Any
     recent_chart: Any
     pattern_chart: Any
+    pattern_heatmap: Any
     pattern_status: Any
     pattern_start_input: Any
     pattern_end_input: Any
@@ -357,7 +382,7 @@ def update_hero(refs: UIRefs) -> None:
 
 def update_recent_chart(refs: UIRefs) -> None:
     """Update the recent glucose chart."""
-    refs.recent_chart.update_figure(build_recent_chart(STATE.df_recent))
+    refs.recent_chart.update_figure(build_recent_chart(STATE.df_recent, STATE.theme))
 
 
 def update_summary_cards(refs: UIRefs) -> None:
@@ -370,7 +395,7 @@ def update_summary_cards(refs: UIRefs) -> None:
         refs.hba1c_label.text = "--"
         refs.dataset_label.text = "--"
         refs.hypo_label.text = "--"
-        refs.tir_chart.update_figure(create_placeholder_chart("No historical data"))
+        refs.tir_chart.update_figure(create_placeholder_chart("No historical data", theme=STATE.theme))
         return
 
     period_days = {
@@ -425,8 +450,8 @@ def update_summary_cards(refs: UIRefs) -> None:
     refs.dataset_label.text = f"{records_selected:,} records"
     refs.hypo_label.text = f"Hypo events: {hypo_events}"
 
-    refs.tir_chart.update_figure(build_tir_chart(selected_df))
-    refs.histogram_chart.update_figure(build_histogram_chart(selected_df))
+    refs.tir_chart.update_figure(build_tir_chart(selected_df, STATE.theme))
+    refs.histogram_chart.update_figure(build_histogram_chart(selected_df, STATE.theme))
 
 
 
@@ -434,15 +459,22 @@ def update_pattern_section(refs: UIRefs) -> None:
     """Update the glucose patterns chart."""
     if STATE.df_3months.empty:
         refs.pattern_status.text = "✗ Historical data unavailable"
-        refs.pattern_chart.update_figure(create_placeholder_chart("No historical data", height=400))
+        refs.pattern_chart.update_figure(create_placeholder_chart("No historical data", height=400, theme=STATE.theme))
+        refs.pattern_heatmap.update_figure(create_placeholder_chart("No historical data", height=400, theme=STATE.theme))
         return
+
+    try:
+        refs.pattern_heatmap.update_figure(build_heatmap_chart(STATE.df_3months, STATE.theme))
+    except Exception as e:
+        refs.pattern_heatmap.update_figure(create_placeholder_chart("Heatmap unavailable", height=400, theme=STATE.theme))
+        logging.error(f"✗ Failed to build heatmap chart: {e}")
 
     start_value = refs.pattern_start_input.value
     end_value = refs.pattern_end_input.value
     
     if not start_value or not end_value:
         refs.pattern_status.text = "⚠ Select a valid date range"
-        refs.pattern_chart.update_figure(create_placeholder_chart("Pick start/end dates", height=400))
+        refs.pattern_chart.update_figure(create_placeholder_chart("Pick start/end dates", height=400, theme=STATE.theme))
         return
 
     # Parse dates as timezone-naive timestamps
@@ -458,12 +490,12 @@ def update_pattern_section(refs: UIRefs) -> None:
             
     except Exception as e:
         refs.pattern_status.text = f"✗ Invalid date: {e}"
-        refs.pattern_chart.update_figure(create_placeholder_chart("Invalid dates", height=400))
+        refs.pattern_chart.update_figure(create_placeholder_chart("Invalid dates", height=400, theme=STATE.theme))
         return
 
     if start_dt > end_dt:
         refs.pattern_status.text = "✗ Start date must be ≤ end date"
-        refs.pattern_chart.update_figure(create_placeholder_chart("Invalid range", height=400))
+        refs.pattern_chart.update_figure(create_placeholder_chart("Invalid range", height=400, theme=STATE.theme))
         return
     
     end_dt = end_dt + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
@@ -479,10 +511,10 @@ def update_pattern_section(refs: UIRefs) -> None:
         df_filtered = df_copy[mask]
     except Exception as e:
         refs.pattern_status.text = f"✗ Filter error: {str(e)[:50]}"
-        refs.pattern_chart.update_figure(create_placeholder_chart("Filter error", height=400))
+        refs.pattern_chart.update_figure(create_placeholder_chart("Filter error", height=400, theme=STATE.theme))
         return
 
-    fig, window_text, valid_sgv, points = build_pattern_chart(df_filtered)
+    fig, window_text, valid_sgv, points = build_pattern_chart(df_filtered, STATE.theme)
     refs.pattern_chart.update_figure(fig)
     refs.pattern_status.text = f"✓ {window_text} · {valid_sgv:,} SGVs · {points:,} points"
 
@@ -516,7 +548,9 @@ async def periodic_refresh(refs: UIRefs) -> None:
 @ui.page("/")
 async def index_page() -> None:
     """Main dashboard page."""
-    ui.query("body").classes("bg-slate-950 text-slate-100")
+    storage = app.storage.user
+    initial_theme = storage.get(THEME_STORAGE_KEY) or DEFAULT_THEME
+    set_active_theme(initial_theme, storage)
     ui.page_title("SugarBoard · NiceGUI Dashboard")
     
     # Add external CSS and JavaScript
@@ -524,6 +558,7 @@ async def index_page() -> None:
     ui.add_head_html('<script src="/static/script.js"></script>')
 
     load_task: Optional[asyncio.Task] = None
+    refs: Optional[UIRefs] = None
 
     def schedule_initial_load() -> None:
         nonlocal load_task
@@ -531,18 +566,30 @@ async def index_page() -> None:
             return
         load_task = asyncio.create_task(load_initial_data())
 
+    def on_theme_toggle(value: str) -> None:
+        set_active_theme(value or DEFAULT_THEME, storage)
+        if refs:
+            update_recent_chart(refs)
+            update_summary_cards(refs)
+            update_pattern_section(refs)
+
     with ui.column().classes("w-full max-w-6xl mx-auto py-10 gap-6"):
         # Header with terminal aesthetic
-        with ui.row().classes("items-center gap-3 mb-2"):
-            ui.label("❯").classes("text-4xl font-bold text-violet-400")
-            ui.label("SugarBoard").classes("text-3xl font-bold text-violet-300 tracking-tight")
-            # Loading indicator
-            loading_spinner = ui.spinner(size="lg", color="violet").classes("ml-auto")
-            loading_spinner.set_visibility(False)
+        with ui.row().classes("items-center gap-3 mb-2 w-full flex-wrap"):
+            ui.label("❯").classes("text-4xl font-bold text-violet-400 terminal-arrow")
+            ui.label("SugarBoard").classes("text-3xl font-bold text-violet-300 tracking-tight terminal-title")
+            with ui.row().classes("items-center gap-3 ml-auto shrink-0"):
+                loading_spinner = ui.spinner(size="lg", color="violet")
+                loading_spinner.set_visibility(False)
+                ui.label("Theme").classes("text-xs uppercase tracking-widest text-slate-400")
+                toggle = ui.switch(
+                    value=STATE.theme == "light",
+                    on_change=lambda event: on_theme_toggle("light" if event.value else "dark"),
+                ).props('dense color="purple" keep-color')
+                toggle.classes("theme-toggle-simple")
         ui.label("Real-time CGM monitoring // live refresh every 60s").classes("text-sm text-slate-500 font-mono")
 
         callout_card = render_storage_secret_callout()
-        storage = app.storage.user
         has_saved_auth = bool(storage.get("ns_base_url") and (storage.get("ns_token") or storage.get("ns_api_secret")))
         prefill_verification_pending = has_saved_auth
 
@@ -605,10 +652,10 @@ async def index_page() -> None:
             show_connection_pending(f"Testing saved credentials for {base}...")
         
         # Status banner - terminal-style output
-        with ui.card().classes("w-full bg-black border-2 border-green-500 shadow-lg") as status_card:
+        with ui.card().classes("status-card w-full bg-black border-2 border-green-500 shadow-lg") as status_card:
             with ui.row().classes("items-center gap-2 px-2 py-1"):
                 ui.label("❯").classes("text-green-400 text-base font-bold")
-                with ui.element('div').classes("text-sm text-green-300 font-mono flex-1") as status_container:
+                with ui.element('div').classes("status-terminal-text text-sm font-mono flex-1") as status_container:
                     status_label = ui.html('<span id="terminal-status"></span>')
         status_card.set_visibility(True)
 
@@ -649,7 +696,7 @@ async def index_page() -> None:
         # Recent glucose - full width (most immediate info)
         with ui.card().classes("w-full bg-slate-900 border border-slate-700 shadow-lg"):
             ui.label("RECENT GLUCOSE · Last 4 Hours").classes("text-xs uppercase tracking-widest text-slate-400 font-bold mb-0")
-            recent_chart = ui.plotly(create_placeholder_chart("Loading...", height=280)).classes("w-full -mt-2")
+            recent_chart = ui.plotly(create_placeholder_chart("Loading...", height=280, theme=STATE.theme)).classes("w-full -mt-2")
 
         # TIR Window Controls
         with ui.row().classes("w-full gap-4 items-center"):
@@ -659,20 +706,20 @@ async def index_page() -> None:
                 value="Last Week",
                 label="TIR Window",
                 on_change=lambda _: update_summary_cards(refs),
-            ).classes("w-64 text-sm").props('dark outlined dense color="violet"')
+            ).classes("tir-select w-64 text-sm").props('dark outlined dense color="violet"')
 
         # TIR and Distribution charts
         with ui.row().classes("w-full gap-4 flex-wrap"):
             with ui.card().classes("flex-1 min-w-[300px] bg-slate-900 border border-slate-700 shadow-lg"):
                 ui.label("TIME IN RANGE").classes("text-xs uppercase tracking-widest text-slate-400 font-bold mb-0")
-                tir_chart = ui.plotly(create_placeholder_chart("Loading...", height=360)).classes("w-full -mt-2")
+                tir_chart = ui.plotly(create_placeholder_chart("Loading...", height=360, theme=STATE.theme)).classes("w-full -mt-2")
             with ui.card().classes("flex-1 min-w-[300px] bg-slate-900 border border-slate-700 shadow-lg"):
                 ui.label("DISTRIBUTION").classes("text-xs uppercase tracking-widest text-slate-400 font-bold mb-0")
-                histogram_chart = ui.plotly(create_placeholder_chart("Loading...", height=360)).classes("w-full -mt-2")
+                histogram_chart = ui.plotly(create_placeholder_chart("Loading...", height=360, theme=STATE.theme)).classes("w-full -mt-2")
 
-        # Patterns section - centered and constrained width
-        with ui.row().classes("w-full justify-center"):
-            with ui.card().classes("w-full max-w-4xl bg-slate-900 border border-slate-700 shadow-xl"):
+        # Patterns section - full width to match other rows
+        with ui.row().classes("w-full"):
+            with ui.card().classes("pattern-card w-full bg-slate-900 border border-slate-700 shadow-xl"):
                 with ui.row().classes("items-center gap-3 mb-4"):
                     ui.label("📊").classes("text-2xl")
                     ui.label("DAILY PATTERNS").classes("text-sm uppercase tracking-widest text-slate-400 font-bold")
@@ -684,7 +731,7 @@ async def index_page() -> None:
                     ui.label("⏱").classes("text-lg text-cyan-400")
                     
                     # FROM date with popup
-                    with ui.input(label="FROM", placeholder="Select date").classes("w-40").props('dark outlined dense readonly color="cyan"') as pattern_start_input:
+                    with ui.input(label="FROM", placeholder="Select date").classes("pattern-date-input w-40").props('dark outlined dense readonly color="cyan"') as pattern_start_input:
                         with ui.menu().props('no-parent-event') as start_menu:
                             with ui.date().bind_value(pattern_start_input).props('dark color="cyan"') as start_date:
                                 with ui.row().classes('justify-end gap-2 mt-2'):
@@ -693,7 +740,7 @@ async def index_page() -> None:
                             ui.icon('edit_calendar').on('click', start_menu.open).classes('cursor-pointer text-cyan-400')
                     
                     # TO date with popup
-                    with ui.input(label="TO", placeholder="Select date").classes("w-40").props('dark outlined dense readonly color="violet"') as pattern_end_input:
+                    with ui.input(label="TO", placeholder="Select date").classes("pattern-date-input w-40").props('dark outlined dense readonly color="violet"') as pattern_end_input:
                         with ui.menu().props('no-parent-event') as end_menu:
                             with ui.date().bind_value(pattern_end_input).props('dark color="violet"') as end_date:
                                 with ui.row().classes('justify-end gap-2 mt-2'):
@@ -704,8 +751,16 @@ async def index_page() -> None:
                 # Wire up the change handlers to the actual date pickers
                 start_date.on('update:model-value', lambda _: update_pattern_section(refs))
                 end_date.on('update:model-value', lambda _: update_pattern_section(refs))
-                
-                pattern_chart = ui.plotly(create_placeholder_chart("Select a date range above", height=400))
+
+                with ui.row().classes("w-full gap-4 flex-wrap"):
+                    pattern_chart = (
+                        ui.plotly(create_placeholder_chart("Select a date range above", height=400, theme=STATE.theme))
+                        .classes("flex-1 min-w-[320px]")
+                    )
+                    pattern_heatmap = (
+                        ui.plotly(create_placeholder_chart("Heatmap will load automatically", height=400, theme=STATE.theme))
+                        .classes("flex-1 min-w-[320px]")
+                    )
 
     # Build refs object
     refs = UIRefs(
@@ -726,6 +781,7 @@ async def index_page() -> None:
         histogram_chart=histogram_chart,
         recent_chart=recent_chart,
         pattern_chart=pattern_chart,
+        pattern_heatmap=pattern_heatmap,
         pattern_status=pattern_status,
         pattern_start_input=pattern_start_input,
         pattern_end_input=pattern_end_input,
@@ -806,7 +862,7 @@ async def index_page() -> None:
 
             status_label.content = '<span id="terminal-status" class="terminal-cursor">$ Monitoring live data · Listening for device updates...</span>'
             refs.status_card.classes(remove="border-green-500", add="border-green-500/30")
-            status_container.classes(remove="text-green-300", add="text-green-300/50")
+            status_container.classes(remove="status-terminal-text", add="status-terminal-muted")
         except Exception as exc:
             prefill_verification_pending = False
             refs.pattern_status.text = f"✗ Error: {exc}"
@@ -841,7 +897,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         title="SugarBoard NiceGUI",
         host="0.0.0.0",
         port=port,
-        reload=reload_enabled,
+        reload=True,
         storage_secret=STORAGE_SECRET,
         favicon='static/favicon.png',
     )

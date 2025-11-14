@@ -1,34 +1,227 @@
 /* Custom styles for SugarBoard NiceGUI Dashboard */
 
-body { 
-    font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace !important; 
+:root {
+    --font-mono: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+
+    /* Dark palette */
+    --dark-bg: #050816;
+    --dark-surface: #0f172a;
+    --dark-surface-alt: #18264a;
+    --dark-panel: #1f2e54;
+    --dark-border: #2f3c5a;
+    --dark-text: #e2e8f0;
+    --dark-muted: #9fb1d6;
+    --dark-terminal: #070f1f;
+    --dark-terminal-alt: #0f1b33;
+    --dark-terminal-text: #d8dee9;
+
+    /* Light palette */
+    --light-bg: #f7f3ea;
+    --light-surface: #fff8ec;
+    --light-surface-alt: #f5e6cf;
+    --light-panel: #fbeed9;
+    --light-border: #edd9b0;
+    --light-text: #3c2e12;
+    --light-muted: #7a6232;
+    --light-terminal: #fff3dd;
+    --light-terminal-text: #4a3214;
+
+    /* Accent palette */
+    --accent-violet: #8b5cf6;
+    --accent-cyan: #38bdf8;
+    --accent-amber: #f4c063;
+    --accent-success: #22c55e;
+    --accent-success-strong: #4ade80;
+    --accent-warning: #fbbf24;
+    --accent-error: #f87171;
+    --accent-connection-idle: rgba(148, 163, 184, 0.5);
+
+    /* Shadows & transparencies */
+    --dark-shadow-soft: rgba(8, 14, 32, 0.6);
+    --dark-shadow-strong: rgba(8, 14, 32, 0.8);
+    --light-shadow-soft: rgba(191, 148, 64, 0.25);
+    --light-shadow-strong: rgba(191, 148, 64, 0.35);
+    --glow-blue: rgba(56, 189, 248, 0.16);
+    --glow-violet: rgba(129, 140, 248, 0.12);
+
+    --input-bg-dark: rgba(15, 23, 42, 0.85);
+    --input-bg-light: rgba(255, 250, 240, 0.95);
+    --border-focus-dark: rgba(56, 189, 248, 0.55);
+    --border-focus-purple: rgba(167, 139, 250, 0.55);
+    --border-focus-light: rgba(244, 196, 95, 0.6);
+    --text-muted-dark: rgba(226, 232, 240, 0.7);
+}
+
+body {
+    font-family: var(--font-mono) !important;
+}
+
+.dark-theme {
+    background-color: var(--dark-bg) !important;
+    color: var(--dark-text) !important;
+    background-image: radial-gradient(circle at 20% 20%, var(--glow-blue), transparent 45%), radial-gradient(circle at 80% 0%, var(--glow-violet), transparent 40%);
+}
+
+.dark-theme .bg-slate-950 {
+    background: linear-gradient(135deg, var(--dark-surface), var(--dark-panel)) !important;
+    color: var(--dark-text) !important;
+}
+
+.dark-theme .bg-slate-900 {
+    background: linear-gradient(135deg, var(--dark-surface-alt), var(--dark-panel)) !important;
+    color: var(--dark-text) !important;
+}
+
+.dark-theme .border-slate-700 {
+    border-color: var(--dark-border) !important;
+}
+
+.dark-theme .text-slate-400,
+.dark-theme .text-slate-500 {
+    color: var(--dark-muted) !important;
+}
+
+.dark-theme .bg-black {
+    background: linear-gradient(135deg, var(--dark-terminal), var(--dark-terminal-alt)) !important;
+    color: var(--dark-terminal-text) !important;
+}
+
+.dark-theme .status-card {
+    border-color: var(--accent-cyan) !important;
+    box-shadow: 0 8px 24px var(--dark-shadow-soft) !important;
+    background: linear-gradient(135deg, var(--dark-surface), var(--dark-panel)) !important;
+}
+
+.dark-theme .ns-settings-card {
+    background: var(--input-bg-dark) !important;
+    border-color: var(--border-focus-purple) !important;
+    color: var(--dark-text) !important;
+    box-shadow: 0 20px 45px var(--dark-shadow-strong) !important;
+}
+
+.dark-theme .night-input .q-field__control {
+    background: var(--input-bg-dark) !important;
+    border-color: var(--border-focus-purple) !important;
+}
+
+.light-theme {
+    background-color: var(--light-bg) !important;
+    color: var(--light-text) !important;
+}
+
+.light-theme .bg-slate-950 {
+    background: var(--light-surface) !important;
+    color: var(--light-text) !important;
+}
+
+.light-theme .bg-slate-900 {
+    background: var(--light-panel) !important;
+    color: var(--light-text) !important;
+}
+
+.light-theme .border-slate-700 {
+    border-color: var(--light-border) !important;
+}
+
+.light-theme .text-slate-100,
+.light-theme .text-slate-200,
+.light-theme .text-slate-300 {
+    color: var(--light-text) !important;
+}
+
+.light-theme .text-slate-400,
+.light-theme .text-slate-500 {
+    color: var(--light-muted) !important;
+}
+
+.light-theme .text-violet-200,
+.light-theme .text-violet-300,
+.light-theme .text-violet-400,
+.light-theme .text-violet-500 {
+    color: var(--accent-amber) !important;
+}
+
+.light-theme .bg-black {
+    background: var(--light-terminal) !important;
+    color: var(--light-text) !important;
+}
+
+.light-theme .status-card {
+    border-color: var(--accent-amber) !important;
+    box-shadow: 0 6px 12px var(--light-shadow-soft) !important;
+    background: var(--light-panel) !important;
+}
+
+.light-theme .status-card .text-green-400,
+.light-theme .status-card .text-green-300 {
+    color: var(--accent-success) !important;
+}
+
+.light-theme .ns-settings-card {
+    background: var(--light-surface-alt) !important;
+    border-color: var(--border-focus-light) !important;
+    color: var(--light-text) !important;
+    box-shadow: 0 16px 32px var(--light-shadow-strong) !important;
+}
+
+.light-theme .ns-expansion .text-cyan-200,
+.light-theme .ns-expansion .text-cyan-300 {
+    color: var(--accent-amber) !important;
+}
+
+.light-theme .night-input .q-field__control {
+    background: var(--input-bg-light) !important;
+    border-color: var(--border-focus-light) !important;
+}
+
+.light-theme .night-input .q-field__native,
+.light-theme .night-input .q-field__label {
+    color: var(--light-text) !important;
+}
+
+.light-theme .q-date__header {
+    background: var(--light-panel) !important;
+    color: var(--light-text) !important;
+}
+
+.light-theme .q-date__view {
+    background: var(--light-surface) !important;
+    color: var(--light-text) !important;
+}
+
+.theme-toggle-simple .q-switch__thumb::after {
+    border-radius: 999px;
+}
+
+.theme-toggle-simple .q-switch__inner {
+    min-height: 26px;
 }
 
 /* Compact date pickers */
-.q-field--outlined .q-field__control { 
-    min-height: 40px !important; 
+.q-field--outlined .q-field__control {
+    min-height: 40px !important;
 }
 
-.q-date { 
-    max-width: 280px !important; 
+.q-date {
+    max-width: 280px !important;
 }
 
-.q-date__header { 
-    background: #1e293b !important; 
+.q-date__header {
+    background: var(--dark-panel) !important;
 }
 
-.q-date__view { 
-    background: #0f172a !important; 
+.q-date__view {
+    background: var(--dark-surface) !important;
 }
 
 /* Card hover animations */
-.q-card { 
-    transition: transform 0.2s ease, box-shadow 0.2s ease !important; 
+.q-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
 }
 
-.q-card:hover { 
-    transform: translateY(-4px); 
-    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.3) !important; 
+.q-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.3) !important;
 }
 
 /* Terminal cursor animation */
@@ -43,56 +236,56 @@ body {
 }
 
 .night-input .q-field__control {
-    background: rgba(15, 23, 42, 0.85) !important;
+    background: var(--input-bg-dark) !important;
     border-radius: 12px !important;
-    border: 1px solid rgba(14, 165, 233, 0.25);
+    border: 1px solid var(--border-focus-dark);
 }
 
 .night-input-violet .q-field__control {
-    border-color: rgba(139, 92, 246, 0.35) !important;
+    border-color: var(--border-focus-purple) !important;
 }
 
 .night-input .q-field__native,
 .night-input .q-field__label {
-    color: #e2e8f0 !important;
+    color: var(--dark-text) !important;
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 .night-input .q-field__bottom {
-    color: rgba(226, 232, 240, 0.7) !important;
+    color: var(--text-muted-dark) !important;
 }
 
 .night-input .q-field__control:hover {
-    border-color: rgba(56, 189, 248, 0.6) !important;
-    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35) inset;
+    border-color: var(--border-focus-dark) !important;
+    box-shadow: 0 0 0 1px var(--border-focus-dark) inset;
 }
 
 .night-input-violet .q-field__control:hover {
-    border-color: rgba(167, 139, 250, 0.8) !important;
-    box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.35) inset;
+    border-color: var(--border-focus-purple) !important;
+    box-shadow: 0 0 0 1px var(--border-focus-purple) inset;
 }
 
 .connection-dot {
-    color: rgba(148, 163, 184, 0.5);
+    color: var(--accent-connection-idle);
     font-size: 0.9rem;
     transition: color 0.3s ease, opacity 0.3s ease;
     opacity: 0.4;
 }
 
 .connection-dot-active {
-    color: #4ade80 !important;
+    color: var(--accent-success-strong) !important;
     opacity: 1;
     animation: connectionPulse 1.4s ease-in-out infinite;
 }
 
 .connection-dot-pending {
-    color: #fbbf24 !important;
+    color: var(--accent-warning) !important;
     opacity: 1;
     animation: connectionPulse 1.4s ease-in-out infinite;
 }
 
 .connection-dot-error {
-    color: #f87171 !important;
+    color: var(--accent-error) !important;
     opacity: 1;
     animation: none;
 }
@@ -100,4 +293,109 @@ body {
 @keyframes connectionPulse {
     0%, 100% { transform: scale(0.9); opacity: 0.8; }
     50% { transform: scale(1.15); opacity: 1; }
+}
+
+.light-theme .pattern-card {
+    background: var(--light-panel) !important;
+    border-color: var(--light-border) !important;
+    color: var(--light-text) !important;
+    box-shadow: 0 18px 28px var(--light-shadow-soft) !important;
+}
+
+.pattern-date-input .q-field__control {
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.light-theme .pattern-date-input .q-field__control {
+    background: var(--light-surface) !important;
+    border: 1px dashed var(--border-focus-light) !important;
+    box-shadow: inset 0 1px 4px var(--light-shadow-soft) !important;
+}
+
+.light-theme .pattern-date-input .q-field__control:hover,
+.light-theme .pattern-date-input.q-field--focused .q-field__control {
+    border-color: var(--accent-amber) !important;
+    box-shadow: 0 0 0 2px rgba(244, 196, 95, 0.25) !important;
+}
+
+.light-theme .pattern-date-input .q-field__native,
+.light-theme .pattern-date-input .q-field__label {
+    color: var(--light-text) !important;
+}
+
+.light-theme .pattern-date-input .q-icon {
+    color: var(--accent-amber) !important;
+}
+
+.tir-select .q-field__control {
+    transition: border-color 0.2s ease !important;
+}
+
+.light-theme .tir-select .q-field__control {
+    background: var(--light-surface) !important;
+    border: 1px solid var(--border-focus-light) !important;
+    box-shadow: inset 0 1px 4px var(--light-shadow-soft) !important;
+}
+
+.light-theme .tir-select .q-field__control:hover,
+.light-theme .tir-select.q-field--focused .q-field__control {
+    border-color: var(--accent-amber) !important;
+    box-shadow: 0 0 0 2px rgba(244, 196, 95, 0.25) !important;
+}
+
+.light-theme .tir-select .q-field__native,
+.light-theme .tir-select .q-field__label {
+    color: var(--light-text) !important;
+}
+
+.light-theme .tir-select .q-field__marginal .q-icon {
+    color: var(--accent-amber) !important;
+}
+
+.light-theme .pattern-date-input .text-cyan-400,
+.light-theme .pattern-date-input .text-cyan-500 {
+    color: var(--accent-amber) !important;
+}
+
+.light-theme .pattern-date-input .text-violet-400,
+.light-theme .pattern-date-input .text-violet-500 {
+    color: var(--accent-amber) !important;
+}
+
+.light-theme .terminal-title {
+    color: var(--light-terminal-text) !important;
+}
+
+.light-theme .terminal-arrow {
+    color: var(--accent-amber) !important;
+}
+
+.light-theme .q-spinner__svg {
+    stroke: var(--accent-amber) !important;
+}
+
+.light-theme .night-input-violet .q-field__control {
+    border-color: var(--border-focus-light) !important;
+}
+
+.status-terminal-text {
+    color: var(--accent-success-strong) !important;
+}
+
+.light-theme .status-card .status-terminal-text {
+    color: var(--accent-success) !important;
+}
+
+.status-terminal-muted {
+    color: var(--accent-success-strong) !important;
+    opacity: 0.7;
+}
+
+.dark-theme .status-card .status-terminal-muted {
+    opacity: 0.65;
+}
+
+.light-theme .status-card .status-terminal-muted {
+    color: var(--accent-success) !important;
+    opacity: 0.95;
 }
