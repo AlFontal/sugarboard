@@ -5,6 +5,9 @@ from seleniumbase import BaseCase
 
 
 BASE_URL = os.environ.get("E2E_BASE_URL", "http://localhost:8080")
+RUN_E2E = os.environ.get("RUN_E2E", "0").lower() in {"1", "true", "yes"}
+
+pytestmark = pytest.mark.skipif(not RUN_E2E, reason="Set RUN_E2E=1 to enable Selenium tests")
 
 
 class NiceGUIVisibilityTests(BaseCase):
