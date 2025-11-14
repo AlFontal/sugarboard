@@ -47,6 +47,7 @@ from src.data_services import (
     fetch_recent_data,
     parse_entry_timestamp,
 )
+from src.hero import calculate_hero_metrics
 from src.nightscout_client import NightscoutClient
 from src.state import DataState
 from src.utils import mean_glucose_to_hba1c, strip_timezone
@@ -352,66 +353,24 @@ def update_hero(refs: UIRefs) -> None:
     if STATE.last_value is None:
         # Status card will be hidden by this point, no need to update
         return
+    metrics = calculate_hero_metrics(STATE.last_value, STATE.previous_value or STATE.last_value, STATE.df_recent)
+    if metrics is None:
+        return
 
-    last = STATE.last_value
-    prev = STATE.previous_value or last
-
-    last_ts = parse_entry_timestamp(last) or pd.Timestamp.utcnow().tz_localize("UTC")
-    prev_ts = parse_entry_timestamp(prev) or last_ts
-    last_local = last_ts.tz_convert("Europe/Madrid")
-    
-    delta = (last.get("sgv") or 0) - (prev.get("sgv") or 0)
-    delta_class = "text-green-400" if delta > 0 else "text-red-400" if delta < 0 else "text-slate-400"
-    trend_raw = last.get("direction") or "Flat"
-    curr_dir = DIRECTIONS.get(trend_raw, "→")
-
-    # Calculate delta per minute
-    time_diff_minutes = (last_ts - prev_ts).total_seconds() / 60
-    if time_diff_minutes > 0:
-        delta_per_min = delta / time_diff_minutes
-        refs.delta_rate_label.text = f"{delta_per_min:+.2f} mg/dL/min"
+    refs.last_value_label.text = metrics.last_value_text
+    if metrics.delta_value > 0:
+        delta_class = "text-green-400"
+    elif metrics.delta_value < 0:
+        delta_class = "text-red-400"
     else:
-        refs.delta_rate_label.text = ""
-
-    refs.last_value_label.text = f"{last.get('sgv', '--')} mg/dL {curr_dir}"
-    refs.delta_label.text = f"{delta:+.0f} mg/dL"
-    refs.delta_label.classes(
-        remove="text-green-400 text-red-400 text-slate-400",
-        add=delta_class,
-    )
-
-    minutes_since = max(0, int((pd.Timestamp.utcnow().tz_localize("UTC") - last_ts).total_seconds() / 60))
-    refs.last_subtitle_label.text = "just now" if minutes_since == 0 else f"{minutes_since} min ago"
-    refs.updated_label.text = f"{last_local.strftime('%d %b %Y · %H:%M')}"
-    device_name = last.get("device") or "—"
-    refs.updated_device_label.text = f"from device: {device_name}"
-
-    def compute_in_range_streak_minutes() -> int:
-        df_recent = STATE.df_recent
-        if df_recent.empty or "date" not in df_recent or "sgv" not in df_recent:
-            return 0
-        try:
-            df = ensure_timezone_aware(df_recent.copy()).sort_values("date")
-        except Exception:
-            return 0
-        last_row = df.iloc[-1]
-        if not (TARGET_LOW <= last_row["sgv"] <= TARGET_MILD_HIGH):
-            return 0
-        streak = 0
-        prev_time = last_row["date"] + pd.Timedelta(minutes=5)
-        for _, row in df.iloc[::-1].iterrows():
-            if not (TARGET_LOW <= row["sgv"] <= TARGET_MILD_HIGH):
-                break
-            row_time = row["date"]
-            delta_minutes = int((prev_time - row_time).total_seconds() / 60)
-            if delta_minutes <= 0:
-                delta_minutes = 5
-            streak += delta_minutes
-            prev_time = row_time
-        return streak
-
-    streak_minutes = compute_in_range_streak_minutes()
-    refs.streak_label.text = f"{streak_minutes} min"
+        delta_class = "text-slate-400"
+    refs.delta_label.text = metrics.delta_text
+    refs.delta_label.classes(remove="text-green-400 text-red-400 text-slate-400", add=delta_class)
+    refs.delta_rate_label.text = metrics.delta_rate_text
+    refs.last_subtitle_label.text = metrics.last_subtitle_text
+    refs.updated_label.text = metrics.updated_text
+    refs.updated_device_label.text = metrics.device_text
+    refs.streak_label.text = f"{metrics.streak_minutes} min"
 
 
 def update_recent_chart(refs: UIRefs) -> None:
