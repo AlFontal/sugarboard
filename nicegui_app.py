@@ -811,10 +811,60 @@ async def index_page() -> None:
     # Load and fetch data in the background (after page renders)
     async def load_initial_data():
         nonlocal prefill_verification_pending
+
+        async def try_load_fixture_data() -> bool:
+            data_dir_env = os.environ.get("SUGARBOARD_TEST_DATA_DIR")
+            if not data_dir_env:
+                return False
+            data_dir = Path(data_dir_env)
+            recent_path = data_dir / "recent.json"
+            history_path = data_dir / "history.json"
+            if not recent_path.exists() or not history_path.exists():
+                logging.warning("Fixture data directory %s is missing required files", data_dir)
+                return False
+
+            try:
+                STATE.df_recent = ensure_timezone_aware(pd.read_json(recent_path))
+                STATE.df_3months = ensure_timezone_aware(pd.read_json(history_path))
+            except Exception as exc:  # pragma: no cover
+                logging.error("Failed to load fixture data: %s", exc)
+                return False
+
+            STATE.fetched_at = time.time()
+
+            if not STATE.df_recent.empty:
+                ordered = STATE.df_recent.sort_values("date")
+
+                def _row_to_entry(row: pd.Series) -> dict[str, Any]:
+                    timestamp = pd.Timestamp(row["date"]).tz_convert("UTC")
+                    return {
+                        "sgv": int(row["sgv"]),
+                        "device": row.get("device", "TestDevice"),
+                        "dateString": timestamp.isoformat(),
+                    }
+
+                last_row = ordered.iloc[-1]
+                prev_row = ordered.iloc[-2] if len(ordered) > 1 else last_row
+                STATE.last_value = _row_to_entry(last_row)
+                STATE.previous_value = _row_to_entry(prev_row)
+
+            update_dashboard(refs)
+            handle_connection_verified()
+            await type_status("$ system ready [fixtures]")
+            refs.loading_spinner.set_visibility(False)
+            await asyncio.sleep(0.5)
+            status_label.content = '<span id="terminal-status" class="terminal-cursor">$ Monitoring live data · Listening for device updates...</span>'
+            refs.status_card.classes(remove="border-green-500", add="border-green-500/30")
+            status_container.classes(remove="status-terminal-text", add="status-terminal-muted")
+            return True
+
         refs.loading_spinner.set_visibility(True)
         try:
             await type_status("$ init system...")
             await asyncio.sleep(0.3)
+
+            if await try_load_fixture_data():
+                return
 
             load_recent_cache(STATE)
 
@@ -897,7 +947,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         title="SugarBoard NiceGUI",
         host="0.0.0.0",
         port=port,
-        reload=True,
+        reload=reload_enabled,
         storage_secret=STORAGE_SECRET,
         favicon='static/favicon.png',
     )

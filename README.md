@@ -64,10 +64,11 @@ The NiceGUI app binds to `0.0.0.0:8080`. To use a different port, set `PORT=9090
 ### Developer tools
 
 ```bash
-make lint        # black, isort, flake8
-make test        # pytest + coverage (non-e2e)
-make test-e2e    # e2e suite (requires running app)
-make coverage    # serve coverage HTML report
+make lint             # black, isort, flake8
+./venv/bin/pytest     # unit + integration tests (fast path)
+RUN_E2E=1 ./venv/bin/pytest -m e2e  # spins up NiceGUI + Selenium smoke tests
 ```
+
+The Selenium suite now starts SugarBoard automatically using deterministic fixture data under `tests/data/`, so there’s no manual “nicegui run …” step. Set `RUN_E2E=1` (optionally override `E2E_APP_PORT`) and the fixture will: (1) launch the app, (2) wait for `/health`, (3) run SeleniumBase against it, and (4) tear everything down.
 
 The codebase no longer ships the historical Streamlit implementation. Check out an older branch/tag if you need it.
