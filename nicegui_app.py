@@ -49,7 +49,7 @@ from src.data_services import (
 )
 from src.nightscout_client import NightscoutClient
 from src.state import DataState
-from src.utils import mean_glucose_to_hba1c
+from src.utils import mean_glucose_to_hba1c, strip_timezone
 
 STATE = DataState()
 CACHED_CREDENTIAL_PLACEHOLDER = "[saved credential]"
@@ -513,14 +513,8 @@ def update_pattern_section(refs: UIRefs) -> None:
 
     # Parse dates as timezone-naive timestamps
     try:
-        start_dt = pd.Timestamp(start_value)
-        end_dt = pd.Timestamp(end_value)
-        
-        # Remove timezone if present
-        if hasattr(start_dt, 'tz') and start_dt.tz is not None:
-            start_dt = start_dt.tz_localize(None)
-        if hasattr(end_dt, 'tz') and end_dt.tz is not None:
-            end_dt = end_dt.tz_localize(None)
+        start_dt = strip_timezone(pd.Timestamp(start_value))
+        end_dt = strip_timezone(pd.Timestamp(end_value))
             
     except Exception as e:
         refs.pattern_status.text = f"✗ Invalid date: {e}"
@@ -874,7 +868,7 @@ async def index_page() -> None:
                 ordered = STATE.df_recent.sort_values("date")
 
                 def _row_to_entry(row: pd.Series) -> dict[str, Any]:
-                    timestamp = pd.Timestamp(row["date"]).tz_convert("UTC")
+                    timestamp = strip_timezone(pd.Timestamp(row["date"]))
                     return {
                         "sgv": int(row["sgv"]),
                         "device": row.get("device", "TestDevice"),
