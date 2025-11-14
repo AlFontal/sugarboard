@@ -312,10 +312,11 @@ async def refresh_recent_data(client: NightscoutClient, full_refresh: bool = Fal
 class UIRefs:
     """References to all UI components for updates."""
     last_value_label: Any
+    last_subtitle_label: Any
     delta_label: Any
     delta_rate_label: Any
     updated_label: Any
-    device_label: Any
+    updated_device_label: Any
     tir_value_label: Any
     tir_caption_label: Any
     avg_label: Any
@@ -335,6 +336,7 @@ class UIRefs:
     status_label: Any
     status_card: Any
     loading_spinner: Any
+    streak_label: Any
 
 
 @dataclass
@@ -373,11 +375,43 @@ def update_hero(refs: UIRefs) -> None:
 
     refs.last_value_label.text = f"{last.get('sgv', '--')} mg/dL {curr_dir}"
     refs.delta_label.text = f"{delta:+.0f} mg/dL"
-    refs.delta_label.classes(replace="text-xl font-bold", add=delta_class)
-    # Update timestamp with minutes since and formatted string
-    minutes_since = int((pd.Timestamp.utcnow() - last_ts).total_seconds() / 60)
-    refs.updated_label.text = f"{last_local.strftime('%d %b %Y · %H:%M')}\n{minutes_since} min ago"
-    refs.device_label.text = last.get("device") or "—"
+    refs.delta_label.classes(
+        remove="text-green-400 text-red-400 text-slate-400",
+        add=delta_class,
+    )
+
+    minutes_since = max(0, int((pd.Timestamp.utcnow().tz_localize("UTC") - last_ts).total_seconds() / 60))
+    refs.last_subtitle_label.text = "just now" if minutes_since == 0 else f"{minutes_since} min ago"
+    refs.updated_label.text = f"{last_local.strftime('%d %b %Y · %H:%M')}"
+    device_name = last.get("device") or "—"
+    refs.updated_device_label.text = f"from device: {device_name}"
+
+    def compute_in_range_streak_minutes() -> int:
+        df_recent = STATE.df_recent
+        if df_recent.empty or "date" not in df_recent or "sgv" not in df_recent:
+            return 0
+        try:
+            df = ensure_timezone_aware(df_recent.copy()).sort_values("date")
+        except Exception:
+            return 0
+        last_row = df.iloc[-1]
+        if not (TARGET_LOW <= last_row["sgv"] <= TARGET_MILD_HIGH):
+            return 0
+        streak = 0
+        prev_time = last_row["date"] + pd.Timedelta(minutes=5)
+        for _, row in df.iloc[::-1].iterrows():
+            if not (TARGET_LOW <= row["sgv"] <= TARGET_MILD_HIGH):
+                break
+            row_time = row["date"]
+            delta_minutes = int((prev_time - row_time).total_seconds() / 60)
+            if delta_minutes <= 0:
+                delta_minutes = 5
+            streak += delta_minutes
+            prev_time = row_time
+        return streak
+
+    streak_minutes = compute_in_range_streak_minutes()
+    refs.streak_label.text = f"{streak_minutes} min"
 
 
 def update_recent_chart(refs: UIRefs) -> None:
@@ -664,16 +698,18 @@ async def index_page() -> None:
             with ui.card().classes("flex-1 bg-slate-900 border border-slate-700 shadow-lg flex flex-col"):
                 ui.label("LAST_READING").classes("text-xs uppercase tracking-widest text-slate-400 font-bold")
                 last_value_label = ui.label("--").classes("text-3xl font-bold text-slate-100")
+                last_subtitle_label = ui.label("--").classes("text-xs text-slate-400 font-mono")
             with ui.card().classes("flex-1 bg-slate-900 border border-slate-700 shadow-lg flex flex-col"):
                 ui.label("DELTA").classes("text-xs uppercase tracking-widest text-slate-400 font-bold")
-                delta_label = ui.label("--").classes("text-xl font-bold")
+                delta_label = ui.label("--").classes("text-xl font-bold text-slate-100")
                 delta_rate_label = ui.label("").classes("text-xs text-slate-500 font-mono")
             with ui.card().classes("flex-1 bg-slate-900 border border-slate-700 shadow-lg flex flex-col"):
                 ui.label("LAST_UPDATED").classes("text-xs uppercase tracking-widest text-slate-400 font-bold")
                 updated_label = ui.label("--").classes("text-sm font-semibold text-slate-300")
+                updated_device_label = ui.label("from device: --").classes("text-xs text-slate-400 font-mono")
             with ui.card().classes("flex-1 bg-slate-900 border border-slate-700 shadow-lg flex flex-col"):
-                ui.label("DEVICE").classes("text-xs uppercase tracking-widest text-slate-400 font-bold")
-                device_label = ui.label("--").classes("text-sm font-semibold text-slate-300")
+                ui.label("IN_RANGE_STREAK").classes("text-xs uppercase tracking-widest text-slate-400 font-bold")
+                streak_label = ui.label("0 min").classes("text-2xl font-bold text-slate-100")
 
         # Summary cards
         with ui.row().classes("w-full gap-4 flex-wrap items-stretch"):
@@ -765,10 +801,11 @@ async def index_page() -> None:
     # Build refs object
     refs = UIRefs(
         last_value_label=last_value_label,
+        last_subtitle_label=last_subtitle_label,
         delta_label=delta_label,
         delta_rate_label=delta_rate_label,
         updated_label=updated_label,
-        device_label=device_label,
+        updated_device_label=updated_device_label,
         tir_value_label=tir_value_label,
         tir_caption_label=tir_caption_label,
         avg_label=avg_label,
@@ -788,6 +825,7 @@ async def index_page() -> None:
         status_label=status_label,
         status_card=status_card,
         loading_spinner=loading_spinner,
+        streak_label=streak_label,
     )
 
     # Start periodic refresh timer
