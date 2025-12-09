@@ -1,8 +1,5 @@
 -r requirements.txt
-black
-flake8
-isort
-pep8-naming
+ruff
 pre-commit
 pytest
 pytest-cov

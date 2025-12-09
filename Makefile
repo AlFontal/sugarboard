@@ -4,9 +4,8 @@ run: install
 	NICEGUI_RELOAD=true ./venv/bin/python nicegui_app.py
 
 lint: install
-	./venv/bin/python -m black .
-	./venv/bin/python -m isort --profile=black .
-	./venv/bin/python -m flake8 --config=.flake8 .
+	./venv/bin/ruff check --fix .
+	./venv/bin/ruff format .
 
 test: lint
 	./venv/bin/python -m pytest -ra -v -m "not e2e" --cov-report=html:coverage --cov-config=pyproject.toml --cov-report=term-missing --cov=. --cov-fail-under=5 ./tests

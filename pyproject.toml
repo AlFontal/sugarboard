@@ -1,13 +1,10 @@
-[tool.black]
-target-version = ['py311']
-exclude = '''
-/(\.git | \.cache | \.pytest_cache | venv | coverage)/
-'''
+[tool.ruff]
+line-length = 88
+target-version = "py311"
 
-[tool.isort]
-profile = 'black'
-multi_line_output = 3
-skip = ['.cache', '.pytest_cache', 'venv', 'coverage', '.git']
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["E501"]
 
 [tool.coverage.run]
 omit = ['tests/*']
