@@ -1,7 +1,7 @@
 import pandas as pd
 
-from src.hero import calculate_hero_metrics
 from src.data_services import ensure_timezone_aware
+from src.hero import calculate_hero_metrics
 
 
 def _make_entry(row):

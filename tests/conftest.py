@@ -10,7 +10,6 @@ from typing import Iterator
 import pytest
 import requests
 
-
 RUN_E2E = os.environ.get("RUN_E2E", "0").lower() in {"1", "true", "yes"}
 
 
@@ -45,7 +44,9 @@ def nicegui_server() -> Iterator[str]:
     env.setdefault("NICEGUI_RELOAD", "0")
 
     cmd = [sys.executable, "nicegui_app.py"]
-    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(
+        cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
     try:
         _wait_for_health(f"http://localhost:{port}/health")
         yield f"http://localhost:{port}"

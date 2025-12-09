@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Callable, Dict, Optional, Tuple, cast
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -21,7 +21,9 @@ from .config import (
 from .nightscout_client import NightscoutClient
 
 
-def fetch_recent_data(client: NightscoutClient) -> Tuple[Dict[str, Any], Dict[str, Any], pd.DataFrame]:
+def fetch_recent_data(
+    client: NightscoutClient,
+) -> Tuple[Dict[str, Any], Dict[str, Any], pd.DataFrame]:
     """Fetch the most recent CGM entries and return structured data."""
     entries = client.get_sgv(count=RECENT_POINTS)
     if not entries:
@@ -93,15 +95,27 @@ def fetch_historical_data(
         if not chunk_data:
             if raw_chunk:
                 newest_timestamp = pd.to_datetime(raw_chunk[-1]["dateString"])
-                if isinstance(newest_timestamp, pd.Timestamp) and newest_timestamp.tzinfo is not None:
+                if (
+                    isinstance(newest_timestamp, pd.Timestamp)
+                    and newest_timestamp.tzinfo is not None
+                ):
                     newest_timestamp = newest_timestamp.tz_localize(None)
-                oldest_date = newest_timestamp if isinstance(newest_timestamp, pd.Timestamp) else None
+                oldest_date = (
+                    newest_timestamp
+                    if isinstance(newest_timestamp, pd.Timestamp)
+                    else None
+                )
             continue
 
         newest_timestamp = pd.to_datetime(chunk_data[-1]["dateString"])
-        if isinstance(newest_timestamp, pd.Timestamp) and newest_timestamp.tzinfo is not None:
+        if (
+            isinstance(newest_timestamp, pd.Timestamp)
+            and newest_timestamp.tzinfo is not None
+        ):
             newest_timestamp = newest_timestamp.tz_localize(None)
-        oldest_date = newest_timestamp if isinstance(newest_timestamp, pd.Timestamp) else None
+        oldest_date = (
+            newest_timestamp if isinstance(newest_timestamp, pd.Timestamp) else None
+        )
 
         target_start = pd.Timestamp.now() - pd.Timedelta(days=days)
         if oldest_date is not None and oldest_date < target_start:

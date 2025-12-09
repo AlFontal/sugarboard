@@ -1,7 +1,12 @@
 import pandas as pd
 import pytest
 
-from src.charts import CHART_THEMES, build_recent_chart, build_tir_chart, create_placeholder_chart
+from src.charts import (
+    CHART_THEMES,
+    build_recent_chart,
+    build_tir_chart,
+    create_placeholder_chart,
+)
 from src.config import TARGET_LOW, TARGET_MILD_HIGH
 
 

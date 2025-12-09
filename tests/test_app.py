@@ -5,7 +5,9 @@ from seleniumbase import BaseCase
 
 RUN_E2E = os.environ.get("RUN_E2E", "0").lower() in {"1", "true", "yes"}
 
-pytestmark = pytest.mark.skipif(not RUN_E2E, reason="Set RUN_E2E=1 to enable Selenium tests")
+pytestmark = pytest.mark.skipif(
+    not RUN_E2E, reason="Set RUN_E2E=1 to enable Selenium tests"
+)
 
 
 @pytest.fixture(scope="class", autouse=True)

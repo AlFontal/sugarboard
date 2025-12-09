@@ -59,17 +59,27 @@ def _get_chart_theme(theme: str) -> ChartTheme:
     return CHART_THEMES.get(theme, CHART_THEMES["dark"])
 
 
-def create_placeholder_chart(title: str = "Loading...", height: int = 360, theme: str = "dark") -> go.Figure:
+def create_placeholder_chart(
+    title: str = "Loading...", height: int = 360, theme: str = "dark"
+) -> go.Figure:
     palette = _get_chart_theme(theme)
     fig = go.Figure()
     fig.update_layout(
         template=palette["template"],
         paper_bgcolor=palette["paper_bg"],
         plot_bgcolor=palette["plot_bg"],
-        font=dict(color=palette["font_color"], family="JetBrains Mono, Consolas, monospace", size=11),
+        font=dict(
+            color=palette["font_color"],
+            family="JetBrains Mono, Consolas, monospace",
+            size=11,
+        ),
         title=dict(text=title, font=dict(size=14, color=palette["muted_text"])),
-        xaxis=dict(showgrid=True, gridcolor=palette["grid_color"], showticklabels=False),
-        yaxis=dict(showgrid=True, gridcolor=palette["grid_color"], showticklabels=False),
+        xaxis=dict(
+            showgrid=True, gridcolor=palette["grid_color"], showticklabels=False
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor=palette["grid_color"], showticklabels=False
+        ),
         height=height,
         margin=dict(t=60, r=20, b=40, l=50),
     )
@@ -103,7 +113,9 @@ def build_recent_chart(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
                 x=[last_row["date"]],
                 y=[last_row["sgv"]],
                 mode="markers",
-                marker=dict(size=10, color="#8b5cf6", line=dict(width=2, color="#0f172a")),
+                marker=dict(
+                    size=10, color="#8b5cf6", line=dict(width=2, color="#0f172a")
+                ),
                 name="Current",
                 hovertemplate="<b>Current: %{y:.0f} mg/dL</b><extra></extra>",
             )
@@ -130,14 +142,22 @@ def build_recent_chart(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
         template=palette["template"],
         paper_bgcolor=palette["paper_bg"],
         plot_bgcolor=palette["plot_bg"],
-        font=dict(color=palette["font_color"], family="JetBrains Mono, Consolas, monospace", size=11),
+        font=dict(
+            color=palette["font_color"],
+            family="JetBrains Mono, Consolas, monospace",
+            size=11,
+        ),
         showlegend=False,
         hovermode="x unified",
         margin=dict(t=40, r=20, b=40, l=50),
         height=280,
         title_font=dict(size=14, color=palette["muted_text"]),
     )
-    fig.update_yaxes(title="Glucose [mg/dL]", gridcolor=palette["grid_color"], title_font=dict(color=palette["muted_text"]))
+    fig.update_yaxes(
+        title="Glucose [mg/dL]",
+        gridcolor=palette["grid_color"],
+        title_font=dict(color=palette["muted_text"]),
+    )
     fig.update_xaxes(title=None, gridcolor=palette["grid_color"])
     return fig
 
@@ -159,7 +179,9 @@ def build_tir_chart(selected_df: pd.DataFrame, theme: str = "dark") -> go.Figure
         {
             "cat_glucose": bg_categories,
             "value": [tir_counts.get(cat, 0) for cat in bg_categories],
-            "percent_label": [f"{(tir_counts.get(cat, 0) * 100):.0f}%" for cat in bg_categories],
+            "percent_label": [
+                f"{(tir_counts.get(cat, 0) * 100):.0f}%" for cat in bg_categories
+            ],
         }
     )
     value_max = max(tir_data["value"].max(), 0.0001)
@@ -200,7 +222,11 @@ def build_tir_chart(selected_df: pd.DataFrame, theme: str = "dark") -> go.Figure
         template=palette["template"],
         paper_bgcolor=palette["paper_bg"],
         plot_bgcolor=palette["plot_bg"],
-        font=dict(color=palette["font_color"], family="JetBrains Mono, Consolas, monospace", size=11),
+        font=dict(
+            color=palette["font_color"],
+            family="JetBrains Mono, Consolas, monospace",
+            size=11,
+        ),
         showlegend=False,
         height=360,
         margin=dict(t=50, r=20, b=70, l=40),
@@ -220,8 +246,13 @@ def build_histogram_chart(selected_df: pd.DataFrame, theme: str = "dark") -> go.
 
     total_count = hist_data.sum()
     hist_pct = (hist_data / total_count * 100) if total_count > 0 else hist_data
-    bin_centers = [(bin_edges[i] + bin_edges[i + 1]) / 2 for i in range(len(bin_edges) - 1)]
-    bin_labels = [f"{int(bin_edges[i])}-{int(bin_edges[i + 1])}" for i in range(len(bin_edges) - 1)]
+    bin_centers = [
+        (bin_edges[i] + bin_edges[i + 1]) / 2 for i in range(len(bin_edges) - 1)
+    ]
+    bin_labels = [
+        f"{int(bin_edges[i])}-{int(bin_edges[i + 1])}"
+        for i in range(len(bin_edges) - 1)
+    ]
 
     def get_color_for_bin(bin_center):
         if bin_center < TARGET_SEVERE_LOW:
@@ -256,25 +287,43 @@ def build_histogram_chart(selected_df: pd.DataFrame, theme: str = "dark") -> go.
         (TARGET_MILD_HIGH, "#10b981"),
         (TARGET_HIGH, "#f59e0b"),
     ]:
-        fig.add_vline(x=target, line_dash="dash", line_color=color, opacity=0.7, line_width=2)
+        fig.add_vline(
+            x=target, line_dash="dash", line_color=color, opacity=0.7, line_width=2
+        )
 
     palette = _get_chart_theme(theme)
     fig.update_layout(
         template=palette["template"],
         paper_bgcolor=palette["paper_bg"],
         plot_bgcolor=palette["plot_bg"],
-        font=dict(color=palette["font_color"], family="JetBrains Mono, Consolas, monospace", size=11),
+        font=dict(
+            color=palette["font_color"],
+            family="JetBrains Mono, Consolas, monospace",
+            size=11,
+        ),
         showlegend=False,
         height=360,
         margin=dict(t=50, r=20, b=70, l=40),
         title_font=dict(size=14, color=palette["muted_text"]),
-        xaxis=dict(title="Glucose [mg/dL]", gridcolor=palette["grid_color"], title_font=dict(color=palette["muted_text"]), range=[0, 305]),
-        yaxis=dict(title="Percentage", gridcolor=palette["grid_color"], title_font=dict(color=palette["muted_text"]), ticksuffix="%"),
+        xaxis=dict(
+            title="Glucose [mg/dL]",
+            gridcolor=palette["grid_color"],
+            title_font=dict(color=palette["muted_text"]),
+            range=[0, 305],
+        ),
+        yaxis=dict(
+            title="Percentage",
+            gridcolor=palette["grid_color"],
+            title_font=dict(color=palette["muted_text"]),
+            ticksuffix="%",
+        ),
     )
     return fig
 
 
-def build_pattern_chart(sel_df: pd.DataFrame, theme: str = "dark") -> Tuple[go.Figure, str, int, int]:
+def build_pattern_chart(
+    sel_df: pd.DataFrame, theme: str = "dark"
+) -> Tuple[go.Figure, str, int, int]:
     if sel_df.empty:
         fig = create_placeholder_chart("No data in range", height=400, theme=theme)
         return fig, "No data in range", 0, 0
@@ -314,7 +363,14 @@ def build_pattern_chart(sel_df: pd.DataFrame, theme: str = "dark") -> Tuple[go.F
 
     fig = go.Figure()
     fig.add_trace(
-        go.Scatter(x=quantiles["hour"], y=quantiles["q90"], mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip")
+        go.Scatter(
+            x=quantiles["hour"],
+            y=quantiles["q90"],
+            mode="lines",
+            line=dict(width=0),
+            showlegend=False,
+            hoverinfo="skip",
+        )
     )
     fig.add_trace(
         go.Scatter(
@@ -330,7 +386,14 @@ def build_pattern_chart(sel_df: pd.DataFrame, theme: str = "dark") -> Tuple[go.F
         )
     )
     fig.add_trace(
-        go.Scatter(x=quantiles["hour"], y=quantiles["q75"], mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip")
+        go.Scatter(
+            x=quantiles["hour"],
+            y=quantiles["q75"],
+            mode="lines",
+            line=dict(width=0),
+            showlegend=False,
+            hoverinfo="skip",
+        )
     )
     fig.add_trace(
         go.Scatter(
@@ -369,7 +432,11 @@ def build_pattern_chart(sel_df: pd.DataFrame, theme: str = "dark") -> Tuple[go.F
             line_width=2,
             annotation_text=text,
             annotation_position="right",
-            annotation=dict(font_size=10, font_color=color, font_family="JetBrains Mono, Consolas, monospace"),
+            annotation=dict(
+                font_size=10,
+                font_color=color,
+                font_family="JetBrains Mono, Consolas, monospace",
+            ),
         )
 
     fig.update_xaxes(
@@ -392,11 +459,22 @@ def build_pattern_chart(sel_df: pd.DataFrame, theme: str = "dark") -> Tuple[go.F
         template=palette["template"],
         paper_bgcolor=palette["paper_bg"],
         plot_bgcolor=palette["plot_bg"],
-        font=dict(color=palette["font_color"], family="JetBrains Mono, Consolas, monospace", size=11),
+        font=dict(
+            color=palette["font_color"],
+            family="JetBrains Mono, Consolas, monospace",
+            size=11,
+        ),
         margin=dict(t=60, r=30, b=40, l=60),
         height=400,
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, bgcolor=palette["legend_bg"]),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            bgcolor=palette["legend_bg"],
+        ),
         title_font=dict(size=14, color=palette["muted_text"]),
     )
 
@@ -418,20 +496,19 @@ def build_heatmap_chart(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
     if getattr(date_dtype, "tz", None) is None:
         df_heatmap["date"] = df_heatmap["date"].dt.tz_localize("UTC")
 
-    df_heatmap = (df_heatmap
-                  .set_index('date')
-                  .resample('15 min')
-                  ['sgv']
-                  .mean()
-                  .reset_index()
-                  .eval('hour_label=date.dt.floor("15min").dt.strftime("%H:%M")')
-                  .eval('day_label=date.dt.date')
-                  .loc[lambda dd: ~dd[['day_label', 'hour_label']].duplicated()]
-                  )
+    df_heatmap = (
+        df_heatmap.set_index("date")
+        .resample("15 min")["sgv"]
+        .mean()
+        .reset_index()
+        .eval('hour_label=date.dt.floor("15min").dt.strftime("%H:%M")')
+        .eval("day_label=date.dt.date")
+        .loc[lambda dd: ~dd[["day_label", "hour_label"]].duplicated()]
+    )
 
-
-
-    heatmap_matrix = df_heatmap.pivot(index="day_label", columns="hour_label", values="sgv")
+    heatmap_matrix = df_heatmap.pivot(
+        index="day_label", columns="hour_label", values="sgv"
+    )
     heatmap_matrix = heatmap_matrix.dropna(how="all")
     if heatmap_matrix.empty:
         return create_placeholder_chart("Not enough SGV data", height=400, theme=theme)
@@ -486,10 +563,17 @@ def build_heatmap_chart(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
         template=palette["template"],
         paper_bgcolor=palette["paper_bg"],
         plot_bgcolor=palette["plot_bg"],
-        font=dict(color=palette["font_color"], family="JetBrains Mono, Consolas, monospace", size=11),
+        font=dict(
+            color=palette["font_color"],
+            family="JetBrains Mono, Consolas, monospace",
+            size=11,
+        ),
         margin=dict(t=60, r=30, b=40, l=70),
         height=400,
-        title=dict(text="Glucose Heatmap · Full Range", font=dict(size=14, color=palette["muted_text"])),
+        title=dict(
+            text="Glucose Heatmap · Full Range",
+            font=dict(size=14, color=palette["muted_text"]),
+        ),
     )
     hourly_tick_indices = list(range(0, len(x_labels), 4)) or [0]
     if hourly_tick_indices[-1] != len(x_labels) - 1:
@@ -502,7 +586,9 @@ def build_heatmap_chart(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
         tickvals=hourly_ticks,
         ticktext=hourly_ticks,
     )
-    fig.update_yaxes(title="Date", gridcolor=palette["grid_color"], autorange="reversed")
+    fig.update_yaxes(
+        title="Date", gridcolor=palette["grid_color"], autorange="reversed"
+    )
     return fig
 
 
