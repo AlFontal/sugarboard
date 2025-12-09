@@ -50,9 +50,7 @@ class NightscoutClient:
         response.raise_for_status()
         return response.json()
 
-    def get_sgv(
-        self, count: int = 288, extra_find: Optional[Dict[str, Any]] = None
-    ) -> Any:
+    def get_sgv(self, count: int = 288, extra_find: Optional[Dict[str, Any]] = None) -> Any:
         params: Dict[str, Any] = {"count": count}
         if extra_find:
             self._apply_find(params, extra_find)

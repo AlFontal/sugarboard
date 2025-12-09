@@ -36,14 +36,10 @@ def _calculate_in_range_streak_minutes(df_recent: pd.DataFrame) -> int:
     last_oor_time = df.query(f"sgv < {TARGET_LOW} or sgv > {TARGET_HIGH}")["date"]
     if not last_oor_time.empty:
         last_oor_timestamp = strip_timezone(last_oor_time.iloc[-1])
-        streak = int(
-            (strip_timezone(last_row["date"]) - last_oor_timestamp).total_seconds() / 60
-        )
+        streak = int((strip_timezone(last_row["date"]) - last_oor_timestamp).total_seconds() / 60)
     else:
         streak = int(
-            (
-                strip_timezone(last_row["date"]) - strip_timezone(df.iloc[0]["date"])
-            ).total_seconds()
+            (strip_timezone(last_row["date"]) - strip_timezone(df.iloc[0]["date"])).total_seconds()
             / 60
         )
 
@@ -72,9 +68,7 @@ def calculate_hero_metrics(
     trend_raw = last_entry.get("direction") or "Flat"
     curr_dir = DIRECTIONS.get(trend_raw, "→")
 
-    minutes_since = max(
-        0, int((pd.Timestamp.now(tz="UTC") - last_ts).total_seconds() / 60)
-    )
+    minutes_since = max(0, int((pd.Timestamp.now(tz="UTC") - last_ts).total_seconds() / 60))
     subtitle = "just now" if minutes_since == 0 else f"{minutes_since} min ago"
     delta_rate_text = f"{delta_per_min:+.2f} mg/dL/min" if delta_minutes else ""
 

@@ -79,9 +79,7 @@ class UIRefs:
     streak_label: Any
 
 
-async def ensure_historical_data(
-    client: NightscoutClient, refs: Optional[Any] = None
-) -> None:
+async def ensure_historical_data(client: NightscoutClient, refs: Optional[Any] = None) -> None:
     """Load or fetch the 90-day historical dataset."""
     cached_df = load_historical_cache()
     if cached_df is not None:
@@ -89,9 +87,7 @@ async def ensure_historical_data(
         STATE.df_3months = cached_df
         return
 
-    logging.info(
-        "⏳ Fetching 90 days of historical data from API (this may take a while)..."
-    )
+    logging.info("⏳ Fetching 90 days of historical data from API (this may take a while)...")
 
     def progress_update(current: int, total: int):
         """Update progress in UI if refs provided."""
@@ -101,11 +97,11 @@ async def ensure_historical_data(
             bar_width = 20
             filled = int((current / total) * bar_width)
             bar = "█" * filled + "░" * (bar_width - filled)
-            progress_text = (
-                f"$ fetching --chunks [{bar}] {current}/{total} ({percentage}%) "
-            )
+            progress_text = f"$ fetching --chunks [{bar}] {current}/{total} ({percentage}%) "
             # Direct content update
-            refs.status_label.content = f'<span id="terminal-status" class="terminal-cursor">{progress_text}</span>'
+            refs.status_label.content = (
+                f'<span id="terminal-status" class="terminal-cursor">{progress_text}</span>'
+            )
 
     df_3months = await fetch_historical_async(client, 90, progress_update)
     STATE.df_3months = df_3months
@@ -113,14 +109,10 @@ async def ensure_historical_data(
     logging.info(f"✓ Fetched and cached {len(df_3months)} historical records")
 
 
-async def refresh_recent_data(
-    client: NightscoutClient, full_refresh: bool = False
-) -> None:
+async def refresh_recent_data(client: NightscoutClient, full_refresh: bool = False) -> None:
     """Refresh recent data, optionally doing a full fetch."""
     if full_refresh or STATE.df_recent.empty or STATE.last_value is None:
-        last_value, previous_value, df_recent = await asyncio.to_thread(
-            fetch_recent_data, client
-        )
+        last_value, previous_value, df_recent = await asyncio.to_thread(fetch_recent_data, client)
         df_recent = ensure_timezone_aware(df_recent)
         STATE.last_value = last_value
         STATE.previous_value = previous_value
@@ -188,9 +180,7 @@ def update_hero(refs: UIRefs) -> None:
     else:
         delta_class = "text-slate-400"
     refs.delta_label.text = metrics.delta_text
-    refs.delta_label.classes(
-        remove="text-green-400 text-red-400 text-slate-400", add=delta_class
-    )
+    refs.delta_label.classes(remove="text-green-400 text-red-400 text-slate-400", add=delta_class)
     refs.delta_rate_label.text = metrics.delta_rate_text
     refs.last_subtitle_label.text = metrics.last_subtitle_text
     refs.updated_label.text = metrics.updated_text
@@ -206,9 +196,7 @@ def update_recent_chart(refs: UIRefs) -> None:
 def update_summary_cards(refs: UIRefs) -> None:
     """Update TIR and summary metrics."""
     if STATE.df_3months.empty:
-        refs.tir_value_label.content = (
-            "<div class='text-3xl font-bold text-slate-100'>--</div>"
-        )
+        refs.tir_value_label.content = "<div class='text-3xl font-bold text-slate-100'>--</div>"
         refs.tir_caption_label.text = "Time in Range window"
         refs.avg_label.text = "--"
         refs.mmol_label.text = "--"
@@ -281,26 +269,18 @@ def update_pattern_section(refs: UIRefs) -> None:
     if STATE.df_3months.empty:
         refs.pattern_status.text = "✗ Historical data unavailable"
         refs.pattern_chart.update_figure(
-            create_placeholder_chart(
-                "No historical data", height=400, theme=STATE.theme
-            )
+            create_placeholder_chart("No historical data", height=400, theme=STATE.theme)
         )
         refs.pattern_heatmap.update_figure(
-            create_placeholder_chart(
-                "No historical data", height=400, theme=STATE.theme
-            )
+            create_placeholder_chart("No historical data", height=400, theme=STATE.theme)
         )
         return
 
     try:
-        refs.pattern_heatmap.update_figure(
-            build_heatmap_chart(STATE.df_3months, STATE.theme)
-        )
+        refs.pattern_heatmap.update_figure(build_heatmap_chart(STATE.df_3months, STATE.theme))
     except Exception as e:
         refs.pattern_heatmap.update_figure(
-            create_placeholder_chart(
-                "Heatmap unavailable", height=400, theme=STATE.theme
-            )
+            create_placeholder_chart("Heatmap unavailable", height=400, theme=STATE.theme)
         )
         logging.error(f"✗ Failed to build heatmap chart: {e}")
 
@@ -310,9 +290,7 @@ def update_pattern_section(refs: UIRefs) -> None:
     if not start_value or not end_value:
         refs.pattern_status.text = "⚠ Select a valid date range"
         refs.pattern_chart.update_figure(
-            create_placeholder_chart(
-                "Pick start/end dates", height=400, theme=STATE.theme
-            )
+            create_placeholder_chart("Pick start/end dates", height=400, theme=STATE.theme)
         )
         return
 
@@ -341,10 +319,7 @@ def update_pattern_section(refs: UIRefs) -> None:
     try:
         df_copy = STATE.df_3months.copy()
         # Normalize dates to timezone-naive if needed
-        if (
-            hasattr(df_copy["date"].dtype, "tz")
-            and df_copy["date"].dtype.tz is not None
-        ):
+        if hasattr(df_copy["date"].dtype, "tz") and df_copy["date"].dtype.tz is not None:
             df_copy["date"] = df_copy["date"].dt.tz_localize(None)
 
         mask = (df_copy["date"] >= start_dt) & (df_copy["date"] <= end_dt)
@@ -358,9 +333,7 @@ def update_pattern_section(refs: UIRefs) -> None:
 
     fig, window_text, valid_sgv, points = build_pattern_chart(df_filtered, STATE.theme)
     refs.pattern_chart.update_figure(fig)
-    refs.pattern_status.text = (
-        f"✓ {window_text} · {valid_sgv:,} SGVs · {points:,} points"
-    )
+    refs.pattern_status.text = f"✓ {window_text} · {valid_sgv:,} SGVs · {points:,} points"
 
 
 def update_dashboard(refs: UIRefs) -> None:
@@ -401,9 +374,7 @@ def build_dashboard_ui(
         with ui.row().classes("items-center gap-3 ml-auto shrink-0"):
             loading_spinner = ui.spinner(size="lg", color="violet")
             loading_spinner.set_visibility(False)
-            ui.label("Theme").classes(
-                "text-xs uppercase tracking-widest text-slate-400"
-            )
+            ui.label("Theme").classes("text-xs uppercase tracking-widest text-slate-400")
             toggle = ui.switch(
                 value=STATE.theme == "light",
                 on_change=lambda event: on_theme_toggle_callback(
@@ -417,9 +388,7 @@ def build_dashboard_ui(
 
     callout_card = render_storage_secret_callout()
 
-    connection_refs = render_nightscout_settings_card(
-        on_saved=on_settings_saved_callback
-    )
+    connection_refs = render_nightscout_settings_card(on_saved=on_settings_saved_callback)
     connection_refs.callout = callout_card
 
     # Status banner - terminal-style output
@@ -442,18 +411,12 @@ def build_dashboard_ui(
             ui.label("LAST_READING").classes(
                 "text-xs uppercase tracking-widest text-slate-400 font-bold"
             )
-            last_value_label = ui.label("--").classes(
-                "text-3xl font-bold text-slate-100"
-            )
-            last_subtitle_label = ui.label("--").classes(
-                "text-xs text-slate-400 font-mono"
-            )
+            last_value_label = ui.label("--").classes("text-3xl font-bold text-slate-100")
+            last_subtitle_label = ui.label("--").classes("text-xs text-slate-400 font-mono")
         with ui.card().classes(
             "flex-1 bg-slate-900 border border-slate-700 shadow-lg flex flex-col"
         ):
-            ui.label("DELTA").classes(
-                "text-xs uppercase tracking-widest text-slate-400 font-bold"
-            )
+            ui.label("DELTA").classes("text-xs uppercase tracking-widest text-slate-400 font-bold")
             delta_label = ui.label("--").classes("text-xl font-bold text-slate-100")
             delta_rate_label = ui.label("").classes("text-xs text-slate-500 font-mono")
         with ui.card().classes(
@@ -462,9 +425,7 @@ def build_dashboard_ui(
             ui.label("LAST_UPDATED").classes(
                 "text-xs uppercase tracking-widest text-slate-400 font-bold"
             )
-            updated_label = ui.label("--").classes(
-                "text-sm font-semibold text-slate-300"
-            )
+            updated_label = ui.label("--").classes("text-sm font-semibold text-slate-300")
             updated_device_label = ui.label("from device: --").classes(
                 "text-xs text-slate-400 font-mono"
             )
@@ -474,9 +435,7 @@ def build_dashboard_ui(
             ui.label("IN_RANGE_STREAK").classes(
                 "text-xs uppercase tracking-widest text-slate-400 font-bold"
             )
-            streak_label = ui.label("0 min").classes(
-                "text-2xl font-bold text-slate-100"
-            )
+            streak_label = ui.label("0 min").classes("text-2xl font-bold text-slate-100")
 
     # Summary cards
     with ui.row().classes("w-full gap-4 flex-wrap items-stretch"):
@@ -486,9 +445,7 @@ def build_dashboard_ui(
             ui.label("TIME_IN_RANGE").classes(
                 "text-xs uppercase tracking-widest text-slate-400 font-bold"
             )
-            tir_value_label = ui.html(
-                "<div class='text-3xl font-bold text-slate-100'>--</div>"
-            )
+            tir_value_label = ui.html("<div class='text-3xl font-bold text-slate-100'>--</div>")
             tir_caption_label = ui.html(
                 "<div class='text-xs text-slate-500 font-mono'>Time in Range window</div>"
             )
@@ -575,9 +532,9 @@ def build_dashboard_ui(
                 ui.label("DAILY PATTERNS").classes(
                     "text-sm uppercase tracking-widest text-slate-400 font-bold"
                 )
-                pattern_status = ui.label(
-                    "Select a window to explore patterns."
-                ).classes("text-xs text-slate-500 font-mono ml-auto")
+                pattern_status = ui.label("Select a window to explore patterns.").classes(
+                    "text-xs text-slate-500 font-mono ml-auto"
+                )
 
             with ui.row().classes("gap-3 mb-4 items-center"):
                 ui.label("⏱").classes("text-lg text-cyan-400")
@@ -586,9 +543,7 @@ def build_dashboard_ui(
                 with (
                     ui.input(label="FROM", placeholder="Select date")
                     .classes("pattern-date-input w-40")
-                    .props(
-                        'dark outlined dense readonly color="cyan"'
-                    ) as pattern_start_input
+                    .props('dark outlined dense readonly color="cyan"') as pattern_start_input
                 ):
                     with ui.menu().props("no-parent-event") as start_menu:
                         with (
@@ -609,9 +564,7 @@ def build_dashboard_ui(
                 with (
                     ui.input(label="TO", placeholder="Select date")
                     .classes("pattern-date-input w-40")
-                    .props(
-                        'dark outlined dense readonly color="violet"'
-                    ) as pattern_end_input
+                    .props('dark outlined dense readonly color="violet"') as pattern_end_input
                 ):
                     with ui.menu().props("no-parent-event") as end_menu:
                         with (

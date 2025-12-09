@@ -74,12 +74,8 @@ def create_placeholder_chart(
             size=11,
         ),
         title=dict(text=title, font=dict(size=14, color=palette["muted_text"])),
-        xaxis=dict(
-            showgrid=True, gridcolor=palette["grid_color"], showticklabels=False
-        ),
-        yaxis=dict(
-            showgrid=True, gridcolor=palette["grid_color"], showticklabels=False
-        ),
+        xaxis=dict(showgrid=True, gridcolor=palette["grid_color"], showticklabels=False),
+        yaxis=dict(showgrid=True, gridcolor=palette["grid_color"], showticklabels=False),
         height=height,
         margin=dict(t=60, r=20, b=40, l=50),
     )
@@ -113,9 +109,7 @@ def build_recent_chart(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
                 x=[last_row["date"]],
                 y=[last_row["sgv"]],
                 mode="markers",
-                marker=dict(
-                    size=10, color="#8b5cf6", line=dict(width=2, color="#0f172a")
-                ),
+                marker=dict(size=10, color="#8b5cf6", line=dict(width=2, color="#0f172a")),
                 name="Current",
                 hovertemplate="<b>Current: %{y:.0f} mg/dL</b><extra></extra>",
             )
@@ -179,9 +173,7 @@ def build_tir_chart(selected_df: pd.DataFrame, theme: str = "dark") -> go.Figure
         {
             "cat_glucose": bg_categories,
             "value": [tir_counts.get(cat, 0) for cat in bg_categories],
-            "percent_label": [
-                f"{(tir_counts.get(cat, 0) * 100):.0f}%" for cat in bg_categories
-            ],
+            "percent_label": [f"{(tir_counts.get(cat, 0) * 100):.0f}%" for cat in bg_categories],
         }
     )
     value_max = max(tir_data["value"].max(), 0.0001)
@@ -246,12 +238,9 @@ def build_histogram_chart(selected_df: pd.DataFrame, theme: str = "dark") -> go.
 
     total_count = hist_data.sum()
     hist_pct = (hist_data / total_count * 100) if total_count > 0 else hist_data
-    bin_centers = [
-        (bin_edges[i] + bin_edges[i + 1]) / 2 for i in range(len(bin_edges) - 1)
-    ]
+    bin_centers = [(bin_edges[i] + bin_edges[i + 1]) / 2 for i in range(len(bin_edges) - 1)]
     bin_labels = [
-        f"{int(bin_edges[i])}-{int(bin_edges[i + 1])}"
-        for i in range(len(bin_edges) - 1)
+        f"{int(bin_edges[i])}-{int(bin_edges[i + 1])}" for i in range(len(bin_edges) - 1)
     ]
 
     def get_color_for_bin(bin_center):
@@ -287,9 +276,7 @@ def build_histogram_chart(selected_df: pd.DataFrame, theme: str = "dark") -> go.
         (TARGET_MILD_HIGH, "#10b981"),
         (TARGET_HIGH, "#f59e0b"),
     ]:
-        fig.add_vline(
-            x=target, line_dash="dash", line_color=color, opacity=0.7, line_width=2
-        )
+        fig.add_vline(x=target, line_dash="dash", line_color=color, opacity=0.7, line_width=2)
 
     palette = _get_chart_theme(theme)
     fig.update_layout(
@@ -506,9 +493,7 @@ def build_heatmap_chart(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
         .loc[lambda dd: ~dd[["day_label", "hour_label"]].duplicated()]
     )
 
-    heatmap_matrix = df_heatmap.pivot(
-        index="day_label", columns="hour_label", values="sgv"
-    )
+    heatmap_matrix = df_heatmap.pivot(index="day_label", columns="hour_label", values="sgv")
     heatmap_matrix = heatmap_matrix.dropna(how="all")
     if heatmap_matrix.empty:
         return create_placeholder_chart("Not enough SGV data", height=400, theme=theme)
@@ -586,9 +571,7 @@ def build_heatmap_chart(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
         tickvals=hourly_ticks,
         ticktext=hourly_ticks,
     )
-    fig.update_yaxes(
-        title="Date", gridcolor=palette["grid_color"], autorange="reversed"
-    )
+    fig.update_yaxes(title="Date", gridcolor=palette["grid_color"], autorange="reversed")
     return fig
 
 

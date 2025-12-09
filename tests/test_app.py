@@ -5,9 +5,7 @@ from seleniumbase import BaseCase
 
 RUN_E2E = os.environ.get("RUN_E2E", "0").lower() in {"1", "true", "yes"}
 
-pytestmark = pytest.mark.skipif(
-    not RUN_E2E, reason="Set RUN_E2E=1 to enable Selenium tests"
-)
+pytestmark = pytest.mark.skipif(not RUN_E2E, reason="Set RUN_E2E=1 to enable Selenium tests")
 
 
 @pytest.fixture(scope="class", autouse=True)
@@ -38,7 +36,9 @@ class NiceGUIVisibilityTests(BaseCase):
     @pytest.mark.e2e
     def test_theme_toggle_switch_is_interactive(self) -> None:
         self.open(self.server_url)
-        toggle_selector = ".theme-toggle-simple .q-toggle__inner, .theme-toggle-simple .q-switch__inner"
+        toggle_selector = (
+            ".theme-toggle-simple .q-toggle__inner, .theme-toggle-simple .q-switch__inner"
+        )
         self.wait_for_element(toggle_selector)
         self.assert_element_visible(toggle_selector)
         self.click(toggle_selector)

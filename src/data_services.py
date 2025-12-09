@@ -35,10 +35,7 @@ def fetch_recent_data(
 
     df_recent["date"] = pd.to_datetime(df_recent["dateString"], utc=True)
     df_recent = (
-        df_recent[["date", "sgv", "device"]]
-        .drop_duplicates()
-        .set_index("date")
-        .sort_index()
+        df_recent[["date", "sgv", "device"]].drop_duplicates().set_index("date").sort_index()
     )
 
     cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=LINEPLOT_HOURS)
@@ -101,21 +98,14 @@ def fetch_historical_data(
                 ):
                     newest_timestamp = newest_timestamp.tz_localize(None)
                 oldest_date = (
-                    newest_timestamp
-                    if isinstance(newest_timestamp, pd.Timestamp)
-                    else None
+                    newest_timestamp if isinstance(newest_timestamp, pd.Timestamp) else None
                 )
             continue
 
         newest_timestamp = pd.to_datetime(chunk_data[-1]["dateString"])
-        if (
-            isinstance(newest_timestamp, pd.Timestamp)
-            and newest_timestamp.tzinfo is not None
-        ):
+        if isinstance(newest_timestamp, pd.Timestamp) and newest_timestamp.tzinfo is not None:
             newest_timestamp = newest_timestamp.tz_localize(None)
-        oldest_date = (
-            newest_timestamp if isinstance(newest_timestamp, pd.Timestamp) else None
-        )
+        oldest_date = newest_timestamp if isinstance(newest_timestamp, pd.Timestamp) else None
 
         target_start = pd.Timestamp.now() - pd.Timedelta(days=days)
         if oldest_date is not None and oldest_date < target_start:
@@ -126,12 +116,7 @@ def fetch_historical_data(
 
     df_raw = pd.DataFrame(all_data)
     df_raw["date"] = pd.to_datetime(df_raw["dateString"])
-    df_raw = (
-        df_raw[["date", "sgv", "device"]]
-        .drop_duplicates()
-        .set_index("date")
-        .sort_index()
-    )
+    df_raw = df_raw[["date", "sgv", "device"]].drop_duplicates().set_index("date").sort_index()
 
     df_3months = (
         df_raw.resample("5 min")["sgv"]

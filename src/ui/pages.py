@@ -57,8 +57,7 @@ async def index_page() -> None:
 
     prefill_verification_pending = False
     has_saved_auth = bool(
-        storage.get("ns_base_url")
-        and (storage.get("ns_token") or storage.get("ns_api_secret"))
+        storage.get("ns_base_url") and (storage.get("ns_token") or storage.get("ns_api_secret"))
     )
     if has_saved_auth:
         prefill_verification_pending = True
@@ -107,9 +106,7 @@ async def index_page() -> None:
         if connection_refs.callout:
             connection_refs.callout.set_visibility(False)
             connection_refs.callout = None
-        suffix = (
-            " (verified from saved credentials)" if prefill_verification_pending else ""
-        )
+        suffix = " (verified from saved credentials)" if prefill_verification_pending else ""
         connection_refs.status_label.text = f"Connected · {base}{suffix}"
         connection_refs.expansion.value = False
         connection_refs.status_dot.classes(
@@ -146,9 +143,7 @@ async def index_page() -> None:
     async def type_status(text: str, speed: int = 50):
         if not refs:
             return
-        refs.status_label.content = (
-            '<span id="terminal-status" class="terminal-cursor"></span>'
-        )
+        refs.status_label.content = '<span id="terminal-status" class="terminal-cursor"></span>'
         await asyncio.sleep(0.1)
 
         for i in range(len(text) + 1):
@@ -174,9 +169,7 @@ async def index_page() -> None:
             recent_path = data_dir / "recent.json"
             history_path = data_dir / "history.json"
             if not recent_path.exists() or not history_path.exists():
-                logging.warning(
-                    "Fixture data directory %s is missing required files", data_dir
-                )
+                logging.warning("Fixture data directory %s is missing required files", data_dir)
                 return False
 
             try:
@@ -210,9 +203,7 @@ async def index_page() -> None:
             refs.loading_spinner.set_visibility(False)
             await asyncio.sleep(0.5)
             refs.status_label.content = '<span id="terminal-status" class="terminal-cursor">$ Monitoring live data · Listening for device updates...</span>'
-            refs.status_card.classes(
-                remove="border-green-500", add="border-green-500/30"
-            )
+            refs.status_card.classes(remove="border-green-500", add="border-green-500/30")
             refs.status_container.classes(
                 remove="status-terminal-text", add="status-terminal-muted"
             )
@@ -239,9 +230,7 @@ async def index_page() -> None:
             client = get_client_from_storage()
             if client is None:
                 prefill_verification_pending = False
-                refs.pattern_status.text = (
-                    "✗ Configure Nightscout settings above to load data"
-                )
+                refs.pattern_status.text = "✗ Configure Nightscout settings above to load data"
                 await type_status("$ waiting --nightscout-config")
                 return
 
@@ -263,9 +252,7 @@ async def index_page() -> None:
 
             client = get_client_from_storage()
             if client is None:
-                refs.pattern_status.text = (
-                    "✗ Nightscout settings removed; re-enter to continue."
-                )
+                refs.pattern_status.text = "✗ Nightscout settings removed; re-enter to continue."
                 await type_status("$ waiting --nightscout-config")
                 return
 
@@ -287,9 +274,7 @@ async def index_page() -> None:
             await asyncio.sleep(1.5)
 
             refs.status_label.content = '<span id="terminal-status" class="terminal-cursor">$ Monitoring live data · Listening for device updates...</span>'
-            refs.status_card.classes(
-                remove="border-green-500", add="border-green-500/30"
-            )
+            refs.status_card.classes(remove="border-green-500", add="border-green-500/30")
             refs.status_container.classes(
                 remove="status-terminal-text", add="status-terminal-muted"
             )
@@ -308,9 +293,7 @@ async def index_page() -> None:
 
     if has_saved_auth:
         base = storage.get("ns_base_url") or "Nightscout"
-        show_connection_pending(
-            connection_refs, f"Testing saved credentials for {base}..."
-        )
+        show_connection_pending(connection_refs, f"Testing saved credentials for {base}...")
         asyncio.create_task(verify_connection_settings(connection_refs))
         schedule_initial_load()
 

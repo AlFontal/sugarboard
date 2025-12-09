@@ -19,7 +19,9 @@ class NightscoutRefs:
 
 
 CACHED_CREDENTIAL_PLACEHOLDER = "[saved credential]"
-RECENT_REQUEST_TIMEOUT = 10  # Imported from nicegui_app or config? It was in nicegui_app imports but also config.
+RECENT_REQUEST_TIMEOUT = (
+    10  # Imported from nicegui_app or config? It was in nicegui_app imports but also config.
+)
 # checking imports in nicegui_app.py: RECENT_REQUEST_TIMEOUT from src.config
 
 
@@ -64,18 +66,16 @@ def render_nightscout_settings_card(
                 ui.label("Nightscout Connection").classes(
                     "text-xs uppercase tracking-[0.5em] text-cyan-200"
                 )
-                status_dot = ui.icon("fiber_manual_record").classes(
-                    "connection-dot hidden ml-2"
-                )
+                status_dot = ui.icon("fiber_manual_record").classes("connection-dot hidden ml-2")
 
     with expansion:
         with ui.column().classes(
             "ns-settings-card w-full bg-[#0d1629]/95 border border-cyan-900/40 shadow-2xl shadow-black/40 "
             "rounded-2xl px-6 py-5 text-slate-100 backdrop-blur"
         ):
-            status_label = ui.label(
-                f"Current site: {stored_base or 'Not configured'}"
-            ).classes("text-xs text-slate-400 mb-3")
+            status_label = ui.label(f"Current site: {stored_base or 'Not configured'}").classes(
+                "text-xs text-slate-400 mb-3"
+            )
 
             base_input = (
                 ui.input(
@@ -164,9 +164,7 @@ def render_nightscout_settings_card(
             if on_verify:
                 on_verify()
 
-        save_btn = ui.button(
-            "Save Nightscout settings", on_click=save_settings
-        ).classes(
+        save_btn = ui.button("Save Nightscout settings", on_click=save_settings).classes(
             "bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-50 font-mono uppercase tracking-[0.4em] "
             "py-2 px-4 rounded-xl shadow-lg shadow-cyan-900/40 hover:opacity-90 transition"
         )
