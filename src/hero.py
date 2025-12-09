@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 
 import pandas as pd
 
-from .config import DIRECTIONS, TARGET_LOW, TARGET_MILD_HIGH
+from .config import DIRECTIONS, TARGET_LOW, TARGET_HIGH
 from .data_services import ensure_timezone_aware, parse_entry_timestamp
 from .utils import strip_timezone
 
@@ -30,19 +30,16 @@ def _calculate_in_range_streak_minutes(df_recent: pd.DataFrame) -> int:
     except Exception:
         return 0
     last_row = df.iloc[-1]
-    if not (TARGET_LOW <= last_row["sgv"] <= TARGET_MILD_HIGH):
+    if not (TARGET_LOW <= last_row["sgv"] <= TARGET_HIGH):
         return 0
     streak = 0
-    prev_time = pd.Timestamp(last_row["date"]) + pd.Timedelta(minutes=5)
-    for _, row in df.iloc[::-1].iterrows():
-        if not (TARGET_LOW <= row["sgv"] <= TARGET_MILD_HIGH):
-            break
-        row_time = pd.Timestamp(row["date"])
-        delta_minutes = int((prev_time - row_time).total_seconds() / 60)
-        if delta_minutes <= 0:
-            delta_minutes = 5
-        streak += delta_minutes
-        prev_time = row_time
+    last_oor_time = df.query(f"sgv < {TARGET_LOW} or sgv > {TARGET_HIGH}")["date"]
+    if not last_oor_time.empty:
+        last_oor_timestamp = strip_timezone(last_oor_time.iloc[-1])
+        streak = int((strip_timezone(last_row["date"]) - last_oor_timestamp).total_seconds() / 60)
+    else:
+        streak = int((strip_timezone(last_row["date"]) - strip_timezone(df.iloc[0]["date"])).total_seconds() / 60)
+   
     return streak
 
 
