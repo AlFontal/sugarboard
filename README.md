@@ -20,12 +20,14 @@ docker-compose up -d --build
 
 The NiceGUI server will be exposed on [http://localhost:8080](http://localhost:8080). Logs can be tailed with `docker-compose logs -f sugarboard`, and `docker-compose down` stops the stack. The compose file also mounts a named volume to persist cached CGM data between restarts.
 
+Copy `.env.example` to `.env` first and replace `STORAGE_SECRET` with a long random value.
+
 ### Nightscout Credentials
 
 When the dashboard loads, fill in the **Nightscout Connection** card with your base URL plus either:
 
 - **Read token (recommended):** create a read-only API token inside your Nightscout instance (`Settings → API → Add Token`). This grants GET access without exposing the master secret.
-- **API secret:** the classic admin secret string (we hash it and send it via the `api-secret` header). Only use this if you have tokens disabled.
+- **API secret:** the classic admin secret string. Nightscout requires SHA1 for this legacy protocol, so Sugarboard hashes it locally and sends the hash via the `api-secret` header. Only use this if tokens are disabled.
 
 Credentials stay on the server and are never rendered back to the browser. If you set the optional `CGM_SITE` environment variable, it simply pre-fills the base URL field for convenience.
 
@@ -34,7 +36,9 @@ Credentials stay on the server and are never rendered back to the browser. If yo
 - Runtime credentials: provided through the UI card described above.
 - `STORAGE_SECRET`: required for NiceGUI's secure server-side storage (set to any long random string).
 - `RECENT_REQUEST_TIMEOUT`: Nightscout API timeout in seconds (defaults to 60). Increase if your server responds slowly.
-- `TZ`: optional timezone for the container.
+- `DISPLAY_TIMEZONE`: timezone used for dashboard timestamps (defaults to `TZ`, then `UTC`).
+- `ALLOW_HTTP`: set to `1` only for trusted local deployments that cannot use HTTPS.
+- `ALLOW_INSECURE_NS_URLS`: set to `1` only for trusted local/private Nightscout URLs.
 - Cache persistence: by default a Docker volume named `sugarboard-cache` stores `.cache/`.
 - Credential persistence: another volume `sugarboard-storage` stores `.nicegui/` so saved Nightscout credentials survive rebuilds.
 
@@ -48,6 +52,8 @@ from secrets import token_hex
 print(f"STORAGE_SECRET={token_hex(32)}")
 PY
 ```
+
+Never commit `.env`, `.cache/`, `.nicegui/`, or exported CGM data. They can contain credentials or protected health data.
 
 ## Local Development (optional, without Docker)
 
@@ -64,8 +70,8 @@ The NiceGUI app binds to `0.0.0.0:8080`. To use a different port, set `PORT=9090
 ### Developer tools
 
 ```bash
-make lint             # black, isort, flake8
-./venv/bin/pytest     # unit + integration tests (fast path)
+make lint             # ruff check + format check
+make test             # unit + integration tests (fast path)
 RUN_E2E=1 ./venv/bin/pytest -m e2e  # spins up NiceGUI + Selenium smoke tests
 ```
 

@@ -10,6 +10,7 @@ from typing import Any, Optional
 import pandas as pd
 from nicegui import app, ui
 
+from src.config import BASE_DIR
 from src.data_services import ensure_timezone_aware
 from src.ui.components import get_client_from_storage
 from src.ui.dashboard import (
@@ -25,6 +26,22 @@ from src.ui.dashboard import (
 )
 from src.ui.theme import DEFAULT_THEME, THEME_STORAGE_KEY, set_active_theme
 from src.utils import strip_timezone
+
+
+def _safe_fixture_data_dir(raw_path: str) -> Optional[Path]:
+    requested = Path(raw_path).expanduser().resolve()
+    allowed_roots = [
+        (BASE_DIR / "tests").resolve(),
+        (BASE_DIR / "fixtures").resolve(),
+    ]
+    for root in allowed_roots:
+        try:
+            requested.relative_to(root)
+        except ValueError:
+            continue
+        return requested
+    logging.warning("Rejected SUGARBOARD_TEST_DATA_DIR outside test fixture roots: %s", requested)
+    return None
 
 
 @ui.page("/")
@@ -76,7 +93,7 @@ async def index_page() -> None:
             await asyncio.to_thread(lambda: client.get_sgv(count=1))
         except Exception as exc:
             prefill_verification_pending = False
-            # User-friendly error mapping
+            logging.exception("Nightscout connection verification failed")
             err_msg = str(exc)
             if "HTTPSConnectionPool" in err_msg or "Failed to resolve" in err_msg:
                 user_msg = "Could not reach server. Check URL."
@@ -85,7 +102,7 @@ async def index_page() -> None:
             elif "timeout" in err_msg.lower():
                 user_msg = "Connection timed out."
             else:
-                user_msg = f"Connection failed: {exc}"
+                user_msg = "Connection failed. Check logs for details."
 
             connection_refs.status_label.text = user_msg
             connection_refs.status_dot.set_visibility(True)
@@ -165,7 +182,9 @@ async def index_page() -> None:
             data_dir_env = os.environ.get("SUGARBOARD_TEST_DATA_DIR")
             if not data_dir_env:
                 return False
-            data_dir = Path(data_dir_env)
+            data_dir = _safe_fixture_data_dir(data_dir_env)
+            if data_dir is None:
+                return False
             recent_path = data_dir / "recent.json"
             history_path = data_dir / "history.json"
             if not recent_path.exists() or not history_path.exists():
@@ -217,16 +236,6 @@ async def index_page() -> None:
             if await try_load_fixture_data():
                 return
 
-            # Note: load_recent_cache logic assumes modules are imported.
-            # It was imported from nicegui_app but needs to be imported here or handled in dashboard logic.
-            # It is not imported in this file yet! I need to import load_recent_cache.
-            # Wait, I imported load_initial_data logic but missed importing load_recent_cache at top.
-            # I will assume I need to import it.
-            # Checking imports... no load_recent_cache imported.
-            from src.cache import load_recent_cache
-
-            load_recent_cache(STATE)
-
             client = get_client_from_storage()
             if client is None:
                 prefill_verification_pending = False
@@ -234,21 +243,26 @@ async def index_page() -> None:
                 await type_status("$ waiting --nightscout-config")
                 return
 
+            from src.cache import load_recent_cache
+
+            load_recent_cache(STATE, source_url=client.base_url)
+
             await type_status("$ fetch --historical --days=90")
             refs.pattern_status.text = "⏳ Loading from cache/API..."
             await ensure_historical_data(client, refs)
 
             if not STATE.df_3months.empty:
-                cache_path = Path(".cache/nicegui_historical.pkl")
-                if cache_path.exists():
-                    cache_age = time.time() - cache_path.stat().st_mtime
+                from src.cache import HISTORICAL_CACHE
+
+                if HISTORICAL_CACHE.exists():
+                    cache_age = time.time() - HISTORICAL_CACHE.stat().st_mtime
                     refs.pattern_status.text = f"✓ Cached ({int(cache_age / 60)}m old) · {len(STATE.df_3months):,} records"
                 else:
                     refs.pattern_status.text = (
                         f"✓ Fetched from API · {len(STATE.df_3months):,} records"
                     )
 
-            await type_status("$ fetch --recent --hours=4")
+            await type_status("$ fetch --recent")
 
             client = get_client_from_storage()
             if client is None:
@@ -278,11 +292,12 @@ async def index_page() -> None:
             refs.status_container.classes(
                 remove="status-terminal-text", add="status-terminal-muted"
             )
-        except Exception as exc:
+        except Exception:
             prefill_verification_pending = False
-            refs.pattern_status.text = f"✗ Error: {exc}"
-            await type_status(f"$ error -- {exc}")
-            connection_refs.status_label.text = f"Connection failed: {exc}"
+            logging.exception("Initial dashboard load failed")
+            refs.pattern_status.text = "✗ Load failed. Check logs for details."
+            await type_status("$ error -- check logs")
+            connection_refs.status_label.text = "Connection failed. Check logs for details."
             connection_refs.status_dot.set_visibility(True)
             connection_refs.status_dot.classes(
                 remove="hidden connection-dot-active connection-dot-pending",

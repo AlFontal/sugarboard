@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+import ipaddress
+import logging
+import socket
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
+from urllib.parse import urlparse, urlunparse
 
 from nicegui import app, ui
 
-from src.config import DEFAULT_NIGHTSCOUT_URL, STORAGE_SECRET_FROM_ENV
+from src.config import (
+    ALLOW_HTTP,
+    ALLOW_INSECURE_NS_URLS,
+    DEFAULT_NIGHTSCOUT_URL,
+    RECENT_REQUEST_TIMEOUT,
+    STORAGE_SECRET_FROM_ENV,
+)
 from src.nightscout_client import NightscoutClient
 
 
@@ -19,20 +29,70 @@ class NightscoutRefs:
 
 
 CACHED_CREDENTIAL_PLACEHOLDER = "[saved credential]"
-RECENT_REQUEST_TIMEOUT = (
-    10  # Imported from nicegui_app or config? It was in nicegui_app imports but also config.
-)
-# checking imports in nicegui_app.py: RECENT_REQUEST_TIMEOUT from src.config
 
 
 def _sanitize_base_url(value: str) -> str:
-    return value.strip().rstrip("/")
+    raw_value = value.strip().rstrip("/")
+    if not raw_value:
+        return ""
+    if "://" not in raw_value:
+        raw_value = f"https://{raw_value}"
+
+    parsed = urlparse(raw_value)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("Nightscout URL must use http or https.")
+    if parsed.scheme == "http" and not ALLOW_HTTP:
+        raise ValueError("Nightscout URL must use https unless ALLOW_HTTP=1 is set.")
+    if parsed.scheme == "http":
+        logging.warning("ALLOW_HTTP enabled; Nightscout traffic is not encrypted.")
+    if not parsed.hostname:
+        raise ValueError("Nightscout URL is missing a host.")
+    if parsed.username or parsed.password:
+        raise ValueError("Nightscout URL must not include embedded credentials.")
+    if _host_is_private(parsed.hostname) and not ALLOW_INSECURE_NS_URLS:
+        raise ValueError(
+            "Nightscout URL points to a private/local address. "
+            "Set ALLOW_INSECURE_NS_URLS=1 only for trusted local deployments."
+        )
+
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", "", ""))
+
+
+def _host_is_private(hostname: str) -> bool:
+    if hostname.lower() in {"localhost", "localhost.localdomain"}:
+        return True
+    addresses: set[str] = set()
+    try:
+        addresses.add(str(ipaddress.ip_address(hostname)))
+    except ValueError:
+        try:
+            addresses.update(info[4][0] for info in socket.getaddrinfo(hostname, None))
+        except socket.gaierror:
+            return False
+
+    for address in addresses:
+        ip = ipaddress.ip_address(address)
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            return True
+    return False
 
 
 def get_client_from_storage() -> Optional[NightscoutClient]:
     storage = app.storage.user
     base_url = storage.get("ns_base_url")
     if not base_url:
+        return None
+    try:
+        base_url = _sanitize_base_url(base_url)
+    except ValueError as exc:
+        logging.warning("Ignoring invalid Nightscout URL from storage: %s", exc)
         return None
     token = storage.get("ns_token") or None
     api_secret = storage.get("ns_api_secret") or None
@@ -123,7 +183,11 @@ def render_nightscout_settings_card(
             ).classes("text-xs text-slate-400 mb-5 leading-relaxed")
 
         def save_settings() -> None:
-            base = _sanitize_base_url(base_input.value or "")
+            try:
+                base = _sanitize_base_url(base_input.value or "")
+            except ValueError as exc:
+                ui.notify(str(exc), type="warning")
+                return
             raw_token = (token_input.value or "").strip()
             raw_secret = (secret_input.value or "").strip()
 

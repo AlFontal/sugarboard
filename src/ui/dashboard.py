@@ -41,7 +41,7 @@ from src.ui.components import (
     render_nightscout_settings_card,
     render_storage_secret_callout,
 )
-from src.utils import mean_glucose_to_hba1c, strip_timezone
+from src.utils import mean_glucose_to_gmi, strip_timezone
 
 STATE = DataState()
 
@@ -81,7 +81,7 @@ class UIRefs:
 
 async def ensure_historical_data(client: NightscoutClient, refs: Optional[Any] = None) -> None:
     """Load or fetch the 90-day historical dataset."""
-    cached_df = load_historical_cache()
+    cached_df = load_historical_cache(source_url=client.base_url)
     if cached_df is not None:
         logging.info(f"✓ Loaded {len(cached_df)} historical records from cache")
         STATE.df_3months = cached_df
@@ -105,7 +105,7 @@ async def ensure_historical_data(client: NightscoutClient, refs: Optional[Any] =
 
     df_3months = await fetch_historical_async(client, 90, progress_update)
     STATE.df_3months = df_3months
-    save_historical_cache(df_3months)
+    save_historical_cache(df_3months, source_url=client.base_url)
     logging.info(f"✓ Fetched and cached {len(df_3months)} historical records")
 
 
@@ -118,7 +118,7 @@ async def refresh_recent_data(client: NightscoutClient, full_refresh: bool = Fal
         STATE.previous_value = previous_value
         STATE.df_recent = df_recent
         STATE.fetched_at = time.time()
-        save_recent_cache(STATE)
+        save_recent_cache(STATE, source_url=client.base_url)
         return
 
     latest_entry = await asyncio.to_thread(fetch_latest_entry, client)
@@ -158,7 +158,7 @@ async def refresh_recent_data(client: NightscoutClient, full_refresh: bool = Fal
     STATE.previous_value = previous_value
     STATE.df_recent = df_recent
     STATE.fetched_at = time.time()
-    save_recent_cache(STATE)
+    save_recent_cache(STATE, source_url=client.base_url)
 
 
 def update_hero(refs: UIRefs) -> None:
@@ -254,8 +254,8 @@ def update_summary_cards(refs: UIRefs) -> None:
     else:
         refs.avg_label.text = f"{average_glucose:.0f} mg/dL"
         refs.mmol_label.text = f"{average_glucose * 0.0555:.1f} mmol/L"
-        hba1c_value = mean_glucose_to_hba1c(average_glucose)
-        refs.hba1c_label.text = f"{hba1c_value:.1f}%"
+        gmi_value = mean_glucose_to_gmi(average_glucose)
+        refs.hba1c_label.text = f"{gmi_value:.1f}%"
 
     refs.dataset_label.text = f"{records_selected:,} records"
     refs.hypo_label.text = f"Hypo events: {hypo_events}"
@@ -460,9 +460,7 @@ def build_dashboard_ui(
         with ui.card().classes(
             "flex-1 min-w-[200px] bg-slate-900 border border-slate-700 shadow-lg flex flex-col"
         ):
-            ui.label("EST_HbA1c").classes(
-                "text-xs uppercase tracking-widest text-slate-400 font-bold"
-            )
+            ui.label("GMI").classes("text-xs uppercase tracking-widest text-slate-400 font-bold")
             hba1c_label = ui.label("--").classes("text-2xl font-bold text-slate-100")
         with ui.card().classes(
             "flex-1 min-w-[200px] bg-slate-900 border border-slate-700 shadow-lg flex flex-col"
@@ -475,7 +473,7 @@ def build_dashboard_ui(
 
     # Recent glucose - full width
     with ui.card().classes("w-full bg-slate-900 border border-slate-700 shadow-lg"):
-        ui.label("RECENT GLUCOSE · Last 4 Hours").classes(
+        ui.label(f"RECENT GLUCOSE · Last {LINEPLOT_HOURS} Hours").classes(
             "text-xs uppercase tracking-widest text-slate-400 font-bold mb-0"
         )
         recent_chart = ui.plotly(

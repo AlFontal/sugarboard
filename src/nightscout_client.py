@@ -5,6 +5,8 @@ from typing import Any, Dict, Optional
 from urllib.parse import urljoin
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 class NightscoutClient:
@@ -20,9 +22,24 @@ class NightscoutClient:
         self.base_url = base_url.rstrip("/")
         self.token = token or None
         self.timeout = timeout
+        self.session = requests.Session()
+        retry = Retry(
+            total=3,
+            connect=3,
+            read=3,
+            backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset({"GET"}),
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
 
         self.api_secret_hash = None
         if not self.token and api_secret:
+            # Nightscout's legacy API-secret protocol requires SHA1.
+            # Prefer read-only tokens for new configurations.
             self.api_secret_hash = hashlib.sha1(api_secret.encode("utf-8")).hexdigest()
 
     def _build_url(self, path: str) -> str:
@@ -41,7 +58,7 @@ class NightscoutClient:
         req_params = dict(params or {})
         auth_params, headers = self._auth_params_headers()
         req_params.update(auth_params)
-        response = requests.get(
+        response = self.session.get(
             self._build_url(path),
             params=req_params,
             headers=headers,
