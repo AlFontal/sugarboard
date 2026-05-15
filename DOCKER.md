@@ -27,6 +27,7 @@ docker build -t sugarboard:latest .
 docker run -d \
   --name sugarboard \
   -p 8080:8080 \
+  -e STORAGE_SECRET="$(python -c 'from secrets import token_hex; print(token_hex(32))')" \
   --restart unless-stopped \
   sugarboard:latest
 
@@ -121,10 +122,23 @@ environment:
   - CGM_SITE=https://your-site.herokuapp.com  # optional: pre-fills the UI form
   - STORAGE_SECRET=change-me-super-secret    # required for NiceGUI user storage
   - RECENT_REQUEST_TIMEOUT=60               # optional: bump Nightscout timeout
-  - TZ=Europe/Madrid
+  - DISPLAY_TIMEZONE=UTC
+  - TZ=UTC
+  - ALLOW_HTTP=0
+  - ALLOW_INSECURE_NS_URLS=0
+```
 
 > The Nightscout read token or API secret is entered at runtime through the dashboard's "Nightscout Connection" card; do not bake it into the container environment.
-```
+
+Keep `.env`, `.cache/`, `.nicegui/`, and exported CGM data out of git and Docker build contexts. These files can contain credentials or protected health data.
+
+### Public access
+
+Sugarboard is designed as a personal dashboard. If you expose it beyond a trusted private network, put it behind reverse-proxy authentication such as Nginx basic auth, Traefik ForwardAuth, Authelia, or an equivalent gateway. NiceGUI's password option is acceptable for a quick personal gate, but a proxy is easier to audit at the edge.
+
+### Nightscout API secret
+
+Nightscout's legacy API-secret protocol requires SHA1. Sugarboard keeps that behavior for compatibility, but read-only Nightscout tokens are preferred.
 
 ### Persistent Cache & Credentials
 

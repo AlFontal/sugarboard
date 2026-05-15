@@ -22,4 +22,8 @@ exclude_lines = [
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "e2e: mark as end-to-end test",
+]

@@ -8,6 +8,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from .config import (
+    BG_CATEGORIES,
+    DISPLAY_TIMEZONE,
     LIGHT_GREEN,
     LIGHT_RED,
     MILD_YELLOW,
@@ -87,7 +89,7 @@ def build_recent_chart(df: pd.DataFrame, theme: str = "dark") -> go.Figure:
         return create_placeholder_chart("No data yet", theme=theme)
 
     df_plot = df.copy()
-    df_plot["date"] = df_plot["date"].dt.tz_convert("Europe/Madrid").astype(str)
+    df_plot["date"] = df_plot["date"].dt.tz_convert(DISPLAY_TIMEZONE).astype(str)
     palette = _get_chart_theme(theme)
 
     fig = go.Figure()
@@ -160,20 +162,12 @@ def build_tir_chart(selected_df: pd.DataFrame, theme: str = "dark") -> go.Figure
     if selected_df.empty:
         return create_placeholder_chart("No data yet", theme=theme)
 
-    bg_categories = [
-        f"<{TARGET_SEVERE_LOW}",
-        f"{TARGET_SEVERE_LOW}-{TARGET_LOW - 1}",
-        f"{TARGET_LOW}-{TARGET_MILD_HIGH}",
-        f"{TARGET_MILD_HIGH + 1}-{TARGET_HIGH}",
-        f"{TARGET_HIGH + 1}-{TARGET_SEVERE_HIGH}",
-        f">{TARGET_SEVERE_HIGH}",
-    ]
     tir_counts = selected_df["cat_glucose"].value_counts(normalize=True)
     tir_data = pd.DataFrame(
         {
-            "cat_glucose": bg_categories,
-            "value": [tir_counts.get(cat, 0) for cat in bg_categories],
-            "percent_label": [f"{(tir_counts.get(cat, 0) * 100):.0f}%" for cat in bg_categories],
+            "cat_glucose": BG_CATEGORIES,
+            "value": [tir_counts.get(cat, 0) for cat in BG_CATEGORIES],
+            "percent_label": [f"{(tir_counts.get(cat, 0) * 100):.0f}%" for cat in BG_CATEGORIES],
         }
     )
     value_max = max(tir_data["value"].max(), 0.0001)
@@ -184,14 +178,14 @@ def build_tir_chart(selected_df: pd.DataFrame, theme: str = "dark") -> go.Figure
         y="value",
         color="cat_glucose",
         text="percent_label",
-        category_orders={"cat_glucose": bg_categories},
+        category_orders={"cat_glucose": BG_CATEGORIES},
         color_discrete_map={
-            bg_categories[0]: STRONG_RED,
-            bg_categories[1]: LIGHT_RED,
-            bg_categories[2]: LIGHT_GREEN,
-            bg_categories[3]: MILD_YELLOW,
-            bg_categories[4]: LIGHT_RED,
-            bg_categories[5]: STRONG_RED,
+            BG_CATEGORIES[0]: STRONG_RED,
+            BG_CATEGORIES[1]: LIGHT_RED,
+            BG_CATEGORIES[2]: LIGHT_GREEN,
+            BG_CATEGORIES[3]: MILD_YELLOW,
+            BG_CATEGORIES[4]: LIGHT_RED,
+            BG_CATEGORIES[5]: STRONG_RED,
         },
     )
 

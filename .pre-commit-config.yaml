@@ -1,6 +1,6 @@
 repos:
   -   repo: https://github.com/pre-commit/pre-commit-hooks
-      rev: v4.1.0
+      rev: v4.6.0
       hooks:
         - id: check-added-large-files
           name: Check for added large files
@@ -35,5 +35,6 @@ repos:
         name: make-lint
         entry: make
         language: system
-        types: [make]
+        types: [python]
         args: ["lint"]
+        pass_filenames: false

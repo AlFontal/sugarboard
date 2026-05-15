@@ -89,25 +89,10 @@ def fetch_historical_data(
 
         all_data.extend(chunk_data)
 
-        if not chunk_data:
-            if raw_chunk:
-                newest_timestamp = pd.to_datetime(raw_chunk[-1]["dateString"])
-                if (
-                    isinstance(newest_timestamp, pd.Timestamp)
-                    and newest_timestamp.tzinfo is not None
-                ):
-                    newest_timestamp = newest_timestamp.tz_localize(None)
-                oldest_date = (
-                    newest_timestamp if isinstance(newest_timestamp, pd.Timestamp) else None
-                )
-            continue
-
-        newest_timestamp = pd.to_datetime(chunk_data[-1]["dateString"])
-        if isinstance(newest_timestamp, pd.Timestamp) and newest_timestamp.tzinfo is not None:
-            newest_timestamp = newest_timestamp.tz_localize(None)
+        newest_timestamp = pd.to_datetime(chunk_data[-1]["dateString"], utc=True)
         oldest_date = newest_timestamp if isinstance(newest_timestamp, pd.Timestamp) else None
 
-        target_start = pd.Timestamp.now() - pd.Timedelta(days=days)
+        target_start = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=days)
         if oldest_date is not None and oldest_date < target_start:
             break
 
@@ -115,7 +100,7 @@ def fetch_historical_data(
         raise ValueError("Nightscout returned no historical data.")
 
     df_raw = pd.DataFrame(all_data)
-    df_raw["date"] = pd.to_datetime(df_raw["dateString"])
+    df_raw["date"] = pd.to_datetime(df_raw["dateString"], utc=True)
     df_raw = df_raw[["date", "sgv", "device"]].drop_duplicates().set_index("date").sort_index()
 
     df_3months = (
@@ -158,6 +143,8 @@ def ensure_timezone_aware(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Dataframe missing 'date' column.")
     if not is_datetime64_any_dtype(df["date"]):
         df["date"] = pd.to_datetime(df["date"], utc=True)
+    elif getattr(df["date"].dt, "tz", None) is None:
+        df["date"] = df["date"].dt.tz_localize("UTC")
     return df
 
 

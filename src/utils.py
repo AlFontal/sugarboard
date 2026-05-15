@@ -1,9 +1,9 @@
 import pandas as pd
 
 
-def mean_glucose_to_hba1c(g: float) -> float:
+def mean_glucose_to_gmi(g: float) -> float:
     """
-    Computes the estimated Hba1C (or GMI) as defined in Bergenstal et al (doi: 10.2337/dc18-1581)
+    Compute glucose management indicator (GMI) as defined in Bergenstal et al.
 
     Parameters
     ----------
@@ -13,9 +13,14 @@ def mean_glucose_to_hba1c(g: float) -> float:
     Returns
     -------
     float
-    Estimated Hba1c (in %).
+    GMI (in %).
     """
     return 3.31 + 0.02395 * g
+
+
+def mean_glucose_to_hba1c(g: float) -> float:
+    """Backward-compatible alias for callers not yet migrated to GMI naming."""
+    return mean_glucose_to_gmi(g)
 
 
 def strip_timezone(ts: pd.Timestamp) -> pd.Timestamp:
@@ -25,4 +30,4 @@ def strip_timezone(ts: pd.Timestamp) -> pd.Timestamp:
     return ts
 
 
-__all__ = ["mean_glucose_to_hba1c", "strip_timezone"]
+__all__ = ["mean_glucose_to_gmi", "mean_glucose_to_hba1c", "strip_timezone"]

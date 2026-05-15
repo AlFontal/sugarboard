@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 
 import pandas as pd
 
-from .config import DIRECTIONS, TARGET_HIGH, TARGET_LOW
+from .config import DIRECTIONS, DISPLAY_TIMEZONE, TARGET_HIGH, TARGET_LOW
 from .data_services import ensure_timezone_aware, parse_entry_timestamp
 from .utils import strip_timezone
 
@@ -22,27 +22,27 @@ class HeroMetrics:
     streak_minutes: int
 
 
-def _calculate_in_range_streak_minutes(df_recent: pd.DataFrame) -> int:
+def _calculate_in_range_streak_minutes(df_recent: pd.DataFrame, max_gap_minutes: int = 15) -> int:
     if df_recent.empty or "date" not in df_recent or "sgv" not in df_recent:
         return 0
     try:
         df = ensure_timezone_aware(df_recent.copy()).sort_values("date")
     except Exception:
         return 0
-    last_row = df.iloc[-1]
-    if not (TARGET_LOW <= last_row["sgv"] <= TARGET_HIGH):
+    if not (TARGET_LOW <= df.iloc[-1]["sgv"] <= TARGET_HIGH):
         return 0
-    streak = 0
-    last_oor_time = df.query(f"sgv < {TARGET_LOW} or sgv > {TARGET_HIGH}")["date"]
-    if not last_oor_time.empty:
-        last_oor_timestamp = strip_timezone(last_oor_time.iloc[-1])
-        streak = int((strip_timezone(last_row["date"]) - last_oor_timestamp).total_seconds() / 60)
-    else:
-        streak = int(
-            (strip_timezone(last_row["date"]) - strip_timezone(df.iloc[0]["date"])).total_seconds()
-            / 60
-        )
 
+    streak = 0
+    rows = list(df[["date", "sgv"]].itertuples(index=False))
+    for previous, current in zip(reversed(rows[:-1]), reversed(rows[1:]), strict=False):
+        if not (TARGET_LOW <= previous.sgv <= TARGET_HIGH):
+            break
+        gap_minutes = int(
+            (strip_timezone(current.date) - strip_timezone(previous.date)).total_seconds() / 60
+        )
+        if gap_minutes < 0 or gap_minutes > max_gap_minutes:
+            break
+        streak += gap_minutes
     return streak
 
 
@@ -50,7 +50,7 @@ def calculate_hero_metrics(
     last_entry: Optional[Dict[str, Any]],
     previous_entry: Optional[Dict[str, Any]],
     df_recent: pd.DataFrame,
-    local_timezone: str = "Europe/Madrid",
+    local_timezone: str = DISPLAY_TIMEZONE,
 ) -> Optional[HeroMetrics]:
     if last_entry is None:
         return None

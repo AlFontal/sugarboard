@@ -12,6 +12,8 @@ ENV/
 
 # Cache directories
 .cache/
+.nicegui/
+*.pkl
 .streamlit/
 
 # IDE
@@ -35,6 +37,7 @@ htmlcov/
 .coverage
 
 # Development files
+.env
 *.log
 .pre-commit-config.yaml
 .flake8

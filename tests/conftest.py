@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Iterator
@@ -17,9 +18,11 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "e2e: mark as end-to-end test")
 
 
-def _wait_for_health(url: str, timeout: float = 25.0) -> None:
+def _wait_for_health(url: str, proc: subprocess.Popen, timeout: float = 25.0) -> None:
     start = time.time()
     while time.time() - start < timeout:
+        if proc.poll() is not None:
+            raise RuntimeError(f"NiceGUI server exited early with code {proc.returncode}")
         try:
             response = requests.get(url, timeout=1.0)
             if response.status_code == 200:
@@ -44,9 +47,12 @@ def nicegui_server() -> Iterator[str]:
     env.setdefault("NICEGUI_RELOAD", "0")
 
     cmd = [sys.executable, "nicegui_app.py"]
-    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    log_file = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="sugarboard-e2e-", suffix=".log", delete=False
+    )
+    proc = subprocess.Popen(cmd, env=env, stdout=log_file, stderr=subprocess.STDOUT)
     try:
-        _wait_for_health(f"http://localhost:{port}/health")
+        _wait_for_health(f"http://localhost:{port}/health", proc)
         yield f"http://localhost:{port}"
     finally:
         proc.terminate()
@@ -54,3 +60,4 @@ def nicegui_server() -> Iterator[str]:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+        log_file.close()

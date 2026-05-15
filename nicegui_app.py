@@ -4,12 +4,35 @@ import os
 from pathlib import Path
 
 from nicegui import app, ui
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.config import STORAGE_SECRET
 from src.log_setup import setup_logging
 from src.ui.pages import index_page  # noqa: F401 - Register index page
 
 setup_logging()
+
+CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; "
+    "font-src 'self' data:; "
+    "connect-src 'self' ws: wss:; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'"
+)
+
+
+async def _security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("Content-Security-Policy", CSP)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    return response
+
+
+app.add_middleware(BaseHTTPMiddleware, dispatch=_security_headers)
 
 
 @ui.page("/health")

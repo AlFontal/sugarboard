@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   sugarboard:
     build: .
@@ -10,15 +8,23 @@ services:
     environment:
       # Add any environment variables here
       - PYTHONUNBUFFERED=1
-      - STORAGE_SECRET=${STORAGE_SECRET}
+      - STORAGE_SECRET=${STORAGE_SECRET:?STORAGE_SECRET must be set in .env}
       # Increase timeout for slow Nightscout deployments (seconds)
       - RECENT_REQUEST_TIMEOUT=${RECENT_REQUEST_TIMEOUT:-60}
+      - TZ=${TZ:-UTC}
+      - ALLOW_HTTP=${ALLOW_HTTP:-0}
+      - ALLOW_INSECURE_NS_URLS=${ALLOW_INSECURE_NS_URLS:-0}
     volumes:
       # Persist cache directory between container restarts
       - sugarboard-cache:/app/.cache
       # Persist NiceGUI user storage (Nightscout credentials, etc.)
       - sugarboard-storage:/app/.nicegui
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health', timeout=5)"]
       interval: 30s
